@@ -1,0 +1,19 @@
+const socketHandlers = (io) => {
+  io.on('connection', (socket) => {
+    console.log(`Socket connected: ${socket.id}`);
+
+    socket.on('joinRoom', (roomId) => {
+      socket.join(roomId);
+    });
+
+    socket.on('sendMessage', ({ roomId, message }) => {
+      io.to(roomId).emit('receiveMessage', message);
+    });
+
+    socket.on('disconnect', () => {
+      console.log(`Socket disconnected: ${socket.id}`);
+    });
+  });
+};
+
+module.exports = socketHandlers;
