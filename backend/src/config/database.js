@@ -19,6 +19,20 @@ mongoose.set('strictQuery', true);
 // Fail fast instead of buffering operations for 10s when the DB is unreachable.
 mongoose.set('bufferCommands', false);
 
+/**
+ * Models are compiled when their module is required, which routinely happens
+ * before the connection is open. Mongoose's automatic collection and index
+ * creation fires at that moment, and with buffering off it runs against a driver
+ * handle that does not exist yet — a `Cannot read properties of undefined
+ * (reading 'createCollection')` thrown from a module you never called.
+ *
+ * Disabling both makes require order irrelevant and matches how indexes should
+ * be managed anyway: explicitly, once, after the connection is up — see
+ * `ensureIndexes`.
+ */
+mongoose.set('autoCreate', false);
+mongoose.set('autoIndex', false);
+
 let connectionPromise = null;
 
 function buildOptions(overrides = {}) {
@@ -27,9 +41,6 @@ function buildOptions(overrides = {}) {
     minPoolSize: env.MONGO_MIN_POOL_SIZE,
     serverSelectionTimeoutMS: env.MONGO_SERVER_SELECTION_TIMEOUT_MS,
     socketTimeoutMS: env.MONGO_SOCKET_TIMEOUT_MS,
-    // Index creation is a migration concern, not a boot-time concern. Building
-    // indexes automatically on every worker start stampedes a production DB.
-    autoIndex: !env.isProduction,
     ...overrides,
   };
 }
@@ -68,6 +79,25 @@ async function connectDatabase(uri = env.MONGODB_URI, options = {}) {
   return connectionPromise;
 }
 
+/**
+ * Builds the indexes every registered model declares, and waits for them.
+ *
+ * Two reasons this is a function rather than a connect option. Index creation is
+ * a migration concern: building them automatically on every worker start
+ * stampedes a production database with N identical builds, so production calls
+ * this from a migration step, not from boot. And *waiting* matters in tests — an
+ * assertion that a duplicate email is rejected races an index that is still
+ * being built, and fails perhaps one run in five.
+ *
+ * Only models required so far are known to mongoose, so call this after the
+ * application graph is loaded.
+ *
+ * @returns {Promise<void>}
+ */
+async function ensureIndexes() {
+  await Promise.all(Object.values(mongoose.models).map((model) => model.createIndexes()));
+}
+
 async function disconnectDatabase() {
   connectionPromise = null;
   if (mongoose.connection.readyState === 0) return;
@@ -81,6 +111,7 @@ function isDatabaseHealthy() {
 
 module.exports = {
   connectDatabase,
+  ensureIndexes,
   disconnectDatabase,
   isDatabaseHealthy,
   mongoose,

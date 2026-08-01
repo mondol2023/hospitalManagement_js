@@ -18,37 +18,18 @@ const {
   MEDICATION_ROUTE_VALUES,
   SERVICE_CATEGORY_VALUES,
 } = require('../utils/constants');
+const { vitals } = require('./vitals');
 
 /**
  * The bedside record.
  *
- * Vitals bounds are stated here as well as on the schema on purpose: a
- * respiratory rate of 400 should come back as a field-level 422 telling the
- * nurse which reading is wrong, not as a Mongoose cast error after the request
- * has already been authorised and the patient loaded. The two sets of limits are
- * the same numbers — `models/schemas/vitals.js` remains the authority, this is
- * the early exit.
+ * The vitals shape lives in `validators/vitals.js` because the doctor's
+ * encounter record stores the same readings through the same model schema, and
+ * two copies of nine numeric bounds is exactly the kind of duplication that
+ * drifts.
  */
 
 const patientIdParam = z.object({ patientId: objectIdOrSelf });
-
-const vitals = z
-  .object({
-    temperatureC: z.coerce.number().min(25).max(45).optional(),
-    heartRateBpm: z.coerce.number().int().min(20).max(300).optional(),
-    systolicBp: z.coerce.number().int().min(40).max(300).optional(),
-    diastolicBp: z.coerce.number().int().min(20).max(200).optional(),
-    respiratoryRate: z.coerce.number().int().min(4).max(80).optional(),
-    oxygenSaturation: z.coerce.number().min(50).max(100).optional(),
-    weightKg: z.coerce.number().min(0).max(500).optional(),
-    painScore: z.coerce.number().int().min(0).max(10).optional(),
-    bloodGlucoseMgDl: z.coerce.number().min(10).max(1000).optional(),
-  })
-  // Mirrors the model's pre-validate hook: an observation with no observation in
-  // it is a row that costs a query and tells a doctor nothing.
-  .refine((reading) => Object.keys(reading).length > 0, {
-    message: 'At least one reading is required',
-  });
 
 const administerMedication = {
   body: z.object({
