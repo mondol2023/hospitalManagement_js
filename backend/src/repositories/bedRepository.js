@@ -58,7 +58,14 @@ class BedRepository extends BaseRepository {
     return this.findOne({ patient: patientId });
   }
 
-  /** Occupancy board: counts per ward per status, in one round trip. */
+  /**
+   * Occupancy board: counts per ward per status, in one round trip.
+   *
+   * The final `$project` renames the grouping key to `ward`. Leaving it as `_id`
+   * would ship a ward *name* in the field every client reads as a document id —
+   * and the response serialiser, which turns `_id` into `id`, would make it look
+   * even more like one.
+   */
   occupancyByWard() {
     return this.aggregate([
       { $group: { _id: { ward: '$ward', status: '$status' }, count: { $sum: 1 } } },
@@ -70,6 +77,7 @@ class BedRepository extends BaseRepository {
         },
       },
       { $sort: { _id: 1 } },
+      { $project: { _id: 0, ward: '$_id', total: 1, byStatus: 1 } },
     ]);
   }
 

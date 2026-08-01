@@ -189,8 +189,9 @@ careLogSchema.index(
  * where a medication entry with no medicine name is a legal document.
  */
 careLogSchema.pre('validate', function validateByType(next) {
-  // Mongoose surfaces an error thrown from a pre-validate hook as a validation
-  // failure, which the error middleware maps to 400 — not 500.
+  // A single `ValidatorError` — note that this is *not* an instance of
+  // `ValidationError`, so `middleware/errorHandler` matches it explicitly and
+  // maps it to a 422 naming the offending path, rather than a bare 500.
   const fail = (message) => next(new mongoose.Error.ValidatorError({
     message,
     path: 'type',

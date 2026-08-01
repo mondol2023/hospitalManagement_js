@@ -2,12 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
-const {
-  ROLES,
-  CONVERSATION_TYPE,
-  CONVERSATION_TYPE_VALUES,
-  PATIENT_VISIBLE_CONVERSATIONS,
-} = require('../utils/constants');
+const { CONVERSATION_TYPE, CONVERSATION_TYPE_VALUES } = require('../utils/constants');
 
 /**
  * A messaging thread. Replaces the original `Chat` model, which could only
@@ -20,10 +15,15 @@ const {
  *  - `care_team`  — the patient **and** their clinicians. This is the only kind
  *                   a `patient` account can ever join, so a patient's inbox is
  *                   structurally incapable of containing internal discussion.
- *  - `staff_only` — doctors, nurses and other hospital staff. Patients are
- *                   rejected at the model boundary (`isRoleAllowed`), not by a
- *                   remembered `if` in one controller.
+ *  - `staff_only` — doctors, nurses and other hospital staff.
  *  - `direct`     — private 1:1 between two staff members.
+ *
+ * Which roles may join which kind is *not* decided here. It depends on the
+ * participant's `role`, which this document does not hold — enforcing it in the
+ * pre-validate hook would mean a `User` lookup per participant on every single
+ * save. The rule lives in `accessPolicy.canJoinConversation` and is applied at
+ * the three points that can change membership or expose a thread: creation,
+ * `addParticipant`, and every read (`chatService._requireMember`).
  *
  * Read state lives here rather than on each message: a per-participant
  * `lastReadAt` is one small array on one document, whereas a `readBy` array on
@@ -92,20 +92,6 @@ conversationSchema.index(
 );
 
 // --- Statics ---------------------------------------------------------------
-
-/**
- * The channel-wall rule, stated once. Both the creation service and the
- * add-participant path call this, so there is no way to bypass it by using a
- * different endpoint.
- *
- * @param {string} type conversation type
- * @param {string} role user role
- * @returns {boolean}
- */
-conversationSchema.statics.isRoleAllowed = function isRoleAllowed(type, role) {
-  if (role !== ROLES.PATIENT) return true; // all staff may join any thread kind
-  return PATIENT_VISIBLE_CONVERSATIONS.includes(type);
-};
 
 /** Stable, order-independent key for a 1:1 thread. */
 conversationSchema.statics.buildDirectKey = function buildDirectKey(a, b) {

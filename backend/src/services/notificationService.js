@@ -77,13 +77,13 @@ class NotificationService {
     const unique = [...new Set((recipients || []).filter(Boolean).map(String))];
     if (!unique.length) return [];
 
-    const base = this._normalise(payload);
+    const base = this._body(payload);
     const docs = await this.repository.createMany(
       unique.map((recipient) => ({ ...base, recipient })),
       { session }
     );
 
-    const json = { ...base, recipient: undefined, createdAt: new Date() };
+    const json = { ...base, createdAt: new Date() };
     this.realtime.toUsers(unique, SOCKET_EVENTS.NOTIFICATION_NEW, json);
     this._dispatchExternal(unique, json);
 
@@ -113,11 +113,17 @@ class NotificationService {
     return { updated: result.modifiedCount || 0 };
   }
 
-  /** @private fills defaults and clamps the stored payload to the schema. */
-  _normalise({ recipient, title, message, type, channels, data, expiresAt }) {
-    if (!recipient) throw ApiError.badRequest('A notification needs a recipient');
+  /**
+   * @private the part of a notification that does not depend on who receives it.
+   *
+   * Split out from `_normalise` because a fan-out has no single recipient, and
+   * building one payload and stamping each recipient onto a copy is the whole
+   * point of `notifyMany`. Sharing the recipient check between the two is what
+   * previously made every broadcast in the system throw — invisibly, because the
+   * one caller that matters wraps escalation in a best-effort catch.
+   */
+  _body({ title, message, type, channels, data, expiresAt }) {
     return {
-      recipient,
       title,
       message,
       type: type || NOTIFICATION_TYPE.SYSTEM,
@@ -125,6 +131,12 @@ class NotificationService {
       data: data || {},
       ...(expiresAt ? { expiresAt } : {}),
     };
+  }
+
+  /** @private a single stored notification: the shared body plus its addressee. */
+  _normalise(payload) {
+    if (!payload.recipient) throw ApiError.badRequest('A notification needs a recipient');
+    return { ...this._body(payload), recipient: payload.recipient };
   }
 
   /**

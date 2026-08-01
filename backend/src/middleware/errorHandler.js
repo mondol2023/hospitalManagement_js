@@ -61,6 +61,20 @@ function normalise(err) {
     return ApiError.validation('Validation failed', mongooseValidationDetails(err));
   }
 
+  /**
+   * A *single* validator failure, which is a different type from the collection
+   * above and — importantly — not an instance of it. This is what a `pre-validate`
+   * hook produces when it rejects a document by hand, as `CareLog` does for its
+   * per-type required fields. Without this case those rules fell through to the
+   * defect branch, so "a refused dose requires a reason" reached the nurse as
+   * `500 Internal server error` with the actual reason only in the server log.
+   */
+  if (err instanceof mongoose.Error.ValidatorError) {
+    return ApiError.validation('Validation failed', [
+      { field: err.path, message: err.message, code: err.kind || 'invalid' },
+    ]);
+  }
+
   if (err instanceof mongoose.Error.CastError) {
     // Only the path is echoed; `err.value` is caller-supplied and printing it
     // back is a small reflected-content foothold for no benefit.

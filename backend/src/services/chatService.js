@@ -5,7 +5,6 @@ const {
   messageRepository,
   userRepository,
 } = require('../repositories');
-const { Conversation } = require('../models');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
 const accessPolicy = require('../utils/accessPolicy');
@@ -33,13 +32,16 @@ const patientService = require('./patientService');
  *  - **`direct`** — a private 1:1 between two employees. Staff-to-staff by
  *    definition, since a patient fails the role check for it.
  *
- * The wall between the first two is enforced three times over — in the model's
- * pre-validate hook, in `Conversation.isRoleAllowed`, and again here — not out of
- * paranoia but because each layer can be bypassed by a plausible refactor: a new
- * route that forgets the middleware, a bulk import that writes documents
- * directly. The one that cannot be bypassed is the schema, so that is where the
- * final answer lives; this layer exists to turn a violation into a clean 403
- * instead of a validation error.
+ * The wall between the first two is one rule — `accessPolicy.canJoinConversation`
+ * — applied at every point that can put someone in a thread or show them one:
+ * creating a channel, adding a participant, and reading. It is stated once rather
+ * than restated per endpoint, because a wall with two definitions eventually has
+ * two behaviours. The model cannot enforce it: the rule depends on the
+ * participant's `role`, which the conversation document does not hold.
+ *
+ * The route layer's `requireStaff` / `denyPatients` are a first pass, not the
+ * answer — the socket gateway reaches these same methods without passing through
+ * any of it, which is exactly why the check is repeated here.
  *
  * Authorisation for reading a thread is deliberately *membership only*, with no
  * administrator override: a manager who needs to read a private conversation can
@@ -385,11 +387,6 @@ class ChatService {
 
     const user = await this.users.findById(userId, { projection: 'role isActive name' });
     if (!user || !user.isActive) throw ApiError.notFound('User');
-    if (!Conversation.isRoleAllowed(conversation.type, user.role)) {
-      throw ApiError.forbidden('That user cannot join this kind of conversation', {
-        code: 'ROLE_NOT_ALLOWED',
-      });
-    }
     if (!accessPolicy.canJoinConversation(user.role, conversation.type)) {
       throw ApiError.forbidden('That user cannot join this kind of conversation', {
         code: 'ROLE_NOT_ALLOWED',
