@@ -17,9 +17,10 @@
  * Running them as separate projects means `--selectProjects unit` genuinely
  * skips the mongod boot, instead of starting it and then not using it.
  *
- * `--runInBand` is set in the npm scripts rather than here: the in-memory server
- * is shared through `process.env.MONGODB_URI`, and parallel workers would each
- * clear collections out from under the others.
+ * The integration project runs in parallel like any other: workers share one
+ * in-memory mongod but each takes its own database inside it, so clearing
+ * collections between tests cannot reach another worker's data. See
+ * `tests/setup/database.js`.
  */
 
 const setupFiles = ['<rootDir>/tests/setup/env.js'];

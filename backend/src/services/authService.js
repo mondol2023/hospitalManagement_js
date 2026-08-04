@@ -136,7 +136,12 @@ class AuthService {
 
     // Burn the presented token before handing out its replacement.
     await this.tokens.revokeRefreshToken(payload);
-    return { user, ...this.tokens.issueTokens(user) };
+
+    // `findActiveById` is projected for the auth middleware, which needs the
+    // revocation watermark. The client does not, and it is an internal
+    // invalidation timestamp — so it is dropped rather than shipped.
+    const { tokensValidFrom, ...safeUser } = user;
+    return { user: safeUser, ...this.tokens.issueTokens(user) };
   }
 
   /**

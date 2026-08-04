@@ -15,6 +15,27 @@ require('../../src/models');
 jest.setTimeout(30_000);
 
 /**
+ * Each worker gets its own database inside the one shared mongod.
+ *
+ * Isolation between test *files* comes from clearing collections after every
+ * test — which is only safe if no other file is using the same collections at
+ * the same time. Under `--runInBand` that holds trivially. Run without it and
+ * Jest forks a worker per core, four files clear each other's users mid-request,
+ * and the failures surface as `401 ACCOUNT_INACTIVE` from a token whose account
+ * another file just deleted: nothing about the message points at the real cause.
+ *
+ * Naming the database after the worker makes the suite correct under either
+ * invocation, so `npx jest` behaves the same as `npm test`. Databases are cheap
+ * — one mongod process still serves them all, and `globalTeardown` disposes of
+ * the lot.
+ */
+function workerDatabaseUri() {
+  const uri = new URL(process.env.MONGODB_URI);
+  uri.pathname = `/hospital-test-${process.env.JEST_WORKER_ID || '1'}`;
+  return uri.toString();
+}
+
+/**
  * Per-file database lifecycle for the integration project.
  *
  * **Connect once per file.** `connectDatabase` is idempotent and shares one
@@ -36,7 +57,7 @@ beforeAll(async () => {
   // Passed explicitly rather than relying on the frozen config: `globalSetup`
   // writes the in-memory URI into the environment, and being obvious about
   // where the connection points is worth one argument.
-  await connectDatabase(process.env.MONGODB_URI);
+  await connectDatabase(workerDatabaseUri());
   await ensureIndexes();
 });
 

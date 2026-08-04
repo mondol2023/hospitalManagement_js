@@ -42,7 +42,9 @@ class StripePaymentProvider extends PaymentProvider {
 
     let Stripe;
     try {
-      // eslint-disable-next-line global-require, import/no-unresolved, node/no-missing-require
+      // Deliberately lazy and deliberately optional: `stripe` is not a
+      // dependency, so this resolves only in deployments that installed it.
+      // eslint-disable-next-line global-require
       Stripe = require('stripe');
     } catch (error) {
       logger.error('STRIPE_SECRET_KEY is set but the stripe package is not installed');

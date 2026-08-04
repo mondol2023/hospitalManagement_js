@@ -51,10 +51,18 @@ function isClinician(role) {
   return CLINICAL_ROLES.includes(role);
 }
 
-/** True when the actor *is* the patient whose record this is. */
+/**
+ * True when the actor *is* the patient whose record this is.
+ *
+ * The `!== null` matters: `toId` collapses every absent value to `null`, so a
+ * bare equality would have an actor with no id matching an orphaned profile with
+ * no `user` — two unknowns comparing equal and granting access. Neither shape
+ * should occur, which is exactly why the check is here rather than upstream.
+ */
 function isSelf(actor, patient) {
   if (!actor || !patient) return false;
-  return toId(actor.id || actor._id) === toId(patient.user);
+  const actorId = toId(actor.id || actor._id);
+  return actorId !== null && actorId === toId(patient.user);
 }
 
 /**
