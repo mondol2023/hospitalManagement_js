@@ -527,6 +527,25 @@ class BillingService {
    * `paidCents` falls and the status re-derives on its own, and the reversal is
    * appended to `refunds` so the shrinking number has a documented cause.
    *
+   * ## Why this is the mirror image of `pay()`, not a copy of it
+   * A payment charges first and reverses the charge if the ledger write fails.
+   * A refund cannot borrow that shape: the compensating action for "money was
+   * sent back but not recorded" is re-charging a patient who has already been
+   * told they were refunded, which no provider should be asked to do on its own
+   * initiative. So the order inverts —
+   *
+   *   validate → **claim** → refund at the gateway → stamp the reference
+   *
+   * The claim is the important half. It reduces the payment row under the same
+   * optimistic-concurrency lock `pay()` uses, which is what makes the balance
+   * check binding: two refund requests racing on one payment used to both pass a
+   * check against the same stale read and both reach the gateway, releasing the
+   * money twice and recording it once. Now the loser's claim throws before it
+   * can call the gateway at all.
+   *
+   * Every failure after that point leans the same way — the ledger may show a
+   * refund the gateway has not finished, never money that left without a record.
+   *
    * @param {object} args
    * @param {string} args.transactionId identifies the payment being reversed
    * @param {number} [args.amountCents] defaults to the full payment
@@ -555,34 +574,28 @@ class BillingService {
     }
 
     const provider = this.resolveProvider(payment.method);
-    const receipt = await provider.refund({ providerRef: payment.transactionId, amountCents: amount });
-
-    // The gateway has released the money; the ledger must now agree with it, so
-    // this write is retried rather than abandoned on a version clash.
-    const saved = await this._mutate(billId, (doc) => {
-      // Located by index rather than by reference: the payment rows have no `_id`,
-      // so `pull()` would have to match them by value.
-      const index = (doc.payments || []).findIndex(
-        (p) => String(p.transactionId) === String(transactionId)
-      );
-      if (index === -1) throw ApiError.notFound('Payment');
-      const row = doc.payments[index];
-      if (amount > row.amountCents) {
-        throw ApiError.conflict('This payment has already been refunded');
-      }
-
-      if (amount === row.amountCents) doc.payments.splice(index, 1);
-      else row.amountCents -= amount;
-
-      doc.refunds.push({
-        amountCents: amount,
-        method: payment.method,
-        paymentRef: payment.transactionId,
-        transactionId: receipt.providerRef,
-        reason,
-        refundedBy: actor.id,
-      });
+    const { doc: claimed, claimId } = await this._claimRefund(billId, {
+      transactionId,
+      amount,
+      payment,
+      reason,
+      actor,
     });
+
+    let receipt;
+    try {
+      receipt = await provider.refund({ providerRef: payment.transactionId, amountCents: amount });
+      if (receipt.status === PAYMENT_RESULT.FAILED) {
+        throw ApiError.badRequest('The refund was declined', { code: 'REFUND_DECLINED' });
+      }
+    } catch (error) {
+      // Nothing left the building, so the claim has to go back — otherwise the
+      // patient's balance stays credited for money they never received.
+      await this._releaseClaim(billId, claimId, payment, amount);
+      throw error;
+    }
+
+    const saved = (await this._stampRefund(billId, claimId, receipt)) || claimed;
 
     await this._invalidate();
     logger.warn('Payment refunded', {
@@ -729,6 +742,112 @@ class BillingService {
         billId: String(billId),
         providerRef: receipt.providerRef,
         provider: receipt.provider,
+        amountCents,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * @private stage one of a refund: takes the money out of the ledger before the
+   * gateway is asked to release it.
+   *
+   * Re-finding the payment against the freshly loaded document is the point —
+   * the checks the caller already ran were against an unlocked read, and this is
+   * the copy that will actually be saved. A payment that has vanished or shrunk
+   * in between is a concurrent refund that got here first.
+   *
+   * @returns {Promise<{doc: object, claimId: object}>} the saved bill and the id
+   *   of the refund row to stamp once the gateway confirms.
+   */
+  async _claimRefund(billId, { transactionId, amount, payment, reason, actor }) {
+    let claimId;
+    // `_mutate` re-runs this on a version clash, so the mutator stays free of
+    // side effects: each attempt builds a fresh row and only the saved one lives.
+    const doc = await this._mutate(billId, (bill) => {
+      const index = (bill.payments || []).findIndex(
+        (row) => String(row.transactionId) === String(transactionId)
+      );
+      if (index === -1) throw ApiError.notFound('Payment');
+      const row = bill.payments[index];
+      if (amount > row.amountCents) {
+        throw ApiError.conflict('This payment has already been refunded', {
+          code: 'REFUND_TOO_LARGE',
+        });
+      }
+
+      if (amount === row.amountCents) bill.payments.splice(index, 1);
+      else row.amountCents -= amount;
+
+      const claim = bill.refunds.create({
+        amountCents: amount,
+        method: payment.method,
+        paymentRef: payment.transactionId,
+        reason,
+        refundedBy: actor.id,
+      });
+      bill.refunds.push(claim);
+      claimId = claim._id;
+    });
+
+    return { doc, claimId };
+  }
+
+  /**
+   * @private stage three: records which gateway reversal settled the claim.
+   *
+   * A failure here is not the caller's problem — the money is genuinely gone and
+   * the ledger already says so. Only the reference for reconciliation is missing,
+   * so it is logged rather than thrown, and the claimed document is returned as
+   * it stood.
+   */
+  async _stampRefund(billId, claimId, receipt) {
+    try {
+      return await this._mutate(billId, (bill) => {
+        const claim = bill.refunds.id(claimId);
+        if (!claim) throw ApiError.notFound('Refund');
+        claim.transactionId = receipt.providerRef;
+      });
+    } catch (error) {
+      logger.error('Refund settled but its gateway reference could not be stored', {
+        billId: String(billId),
+        claimId: String(claimId),
+        providerRef: receipt.providerRef,
+        error: error.message,
+      });
+      return null;
+    }
+  }
+
+  /**
+   * @private the gateway refused, so the claim is undone: the refund row goes
+   * away and the payment it reduced is restored.
+   *
+   * Best-effort, like `_compensate`. If the release itself fails the ledger
+   * understates what the patient has paid, which shows up as a bill that will not
+   * settle — visible, unlike money quietly leaving.
+   */
+  async _releaseClaim(billId, claimId, payment, amountCents) {
+    const row = typeof payment.toObject === 'function' ? payment.toObject() : { ...payment };
+    try {
+      await this._mutate(billId, (bill) => {
+        bill.refunds.pull(claimId);
+        const index = (bill.payments || []).findIndex(
+          (p) => String(p.transactionId) === String(payment.transactionId)
+        );
+        if (index === -1) bill.payments.push(row);
+        else bill.payments[index].amountCents += amountCents;
+      });
+      logger.warn('Refund claim released after the gateway refused it', {
+        billId: String(billId),
+        paymentRef: String(payment.transactionId),
+        amountCents,
+      });
+    } catch (error) {
+      logger.error('STRANDED REFUND CLAIM — a payment was reversed in the ledger only', {
+        billId: String(billId),
+        claimId: String(claimId),
+        paymentRef: String(payment.transactionId),
         amountCents,
         error: error.message,
       });

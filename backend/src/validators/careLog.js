@@ -117,11 +117,26 @@ const acknowledge = {
  * plus the type it is replacing. The service supplies `patientId` and
  * `performedAt` from the superseded entry — a correction that could move the
  * event to a different patient or a different time would defeat the audit trail.
+ *
+ * Every type-specific payload must be declared here, because this schema strips
+ * what it does not name and the model then enforces the per-type required field
+ * against whatever survived. Omitting `handover` made every handover correction
+ * fail validation; omitting `bed` was quieter and worse — `careLogService.record`
+ * falls back to the patient's *current* bed, so a bed-assignment correction
+ * succeeded while silently restating the movement against the wrong bed.
+ *
+ * The payloads are nested to mirror the stored document, not the flat bodies the
+ * create endpoints accept: a correction is written straight through to the model,
+ * so `handover.toNurse` is the field here where `POST /care-logs/handover` takes
+ * `toNurseUserId`. Server-derived fields (`stockDeducted`, `acceptedAt`) stay out
+ * for the same reason they are absent from `medication` below — they are the
+ * system's record of what happened, not the clinician's.
  */
 const correct = {
   params: idParam(),
   body: z.object({
     type: z.enum(CARE_LOG_TYPE_VALUES).optional(),
+    bed: objectId.optional(),
     notes: optionalText(4000),
     vitals: vitals.optional(),
     medication: z
@@ -141,6 +156,13 @@ const correct = {
         name: shortText(200),
         durationMinutes: z.coerce.number().int().min(0).max(1440).optional(),
         chargeableCents: minorUnits.optional(),
+      })
+      .optional(),
+    handover: z
+      .object({
+        toNurse: objectId,
+        summary: longText(4000),
+        outstandingTasks: z.array(shortText(300)).max(50).optional(),
       })
       .optional(),
     requiresAttention: z.boolean().optional(),

@@ -76,8 +76,13 @@ const careTeam = asyncHandler(async (req, res) => {
   return sendSuccess(res, { data: team });
 });
 
+/**
+ * The actor is passed through because releasing the bed is charted against
+ * whoever discharged the patient; without it `bedService` skips the care-log
+ * entry and the ward is never told.
+ */
 const discharge = asyncHandler(async (req, res) => {
-  const patient = await patientService.discharge(req.patient._id, req.body);
+  const patient = await patientService.discharge(req.patient._id, req.body, req.user);
   return sendSuccess(res, { data: patient });
 });
 

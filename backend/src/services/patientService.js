@@ -6,6 +6,7 @@ const ApiError = require('../utils/ApiError');
 const accessPolicy = require('../utils/accessPolicy');
 const { ROLES, NOTIFICATION_TYPE } = require('../utils/constants');
 const notificationService = require('./notificationService');
+const bedService = require('./bedService');
 
 /**
  * Patient records and care-team composition.
@@ -21,11 +22,13 @@ class PatientService {
     nurses = nurseRepository,
     users = userRepository,
     notifications = notificationService,
+    beds = bedService,
   } = {}) {
     this.patients = patients;
     this.nurses = nurses;
     this.users = users;
     this.notifications = notifications;
+    this.beds = beds;
   }
 
   /**
@@ -206,10 +209,23 @@ class PatientService {
   }
 
   /**
-   * Discharge. The bed is released by `bedService` — this only closes the stay,
-   * so the two writes stay owned by the service that understands each one.
+   * Discharge.
+   *
+   * The bed is released first, through `bedService`, because that is the service
+   * that understands bed state: it flips the bed to `cleaning`, charts the
+   * movement and tells the ward boards. Clearing `patient.bed` here without it
+   * would leave the bed document marked `occupied` by a patient who has gone
+   * home — and `release` refuses to run once the pointer is gone, so nothing
+   * could ever free it again.
+   *
+   * Two cases are not failures and must not block a discharge:
+   * an outpatient who never held a bed, and a stale pointer to a bed some other
+   * patient now holds. Both leave nothing to release; the stay still closes, and
+   * the `$unset` below clears the pointer either way.
    */
-  async discharge(patientId, { summary } = {}) {
+  async discharge(patientId, { summary } = {}, actor) {
+    await this._releaseBed(patientId, actor);
+
     const patient = await this.patients.updateById(patientId, {
       $set: {
         isAdmitted: false,
@@ -221,6 +237,25 @@ class PatientService {
     if (!patient) throw ApiError.notFound('Patient');
     logger.info('Patient discharged', { patientId: String(patientId) });
     return patient;
+  }
+
+  /**
+   * @private frees the discharged patient's bed, tolerating the two states that
+   * mean "there is nothing to free". Anything else is a real fault and is left
+   * to propagate rather than silently stranding inventory.
+   */
+  async _releaseBed(patientId, actor) {
+    try {
+      await this.beds.release(patientId, actor);
+    } catch (error) {
+      const nothingToRelease =
+        error instanceof ApiError && (error.statusCode === 400 || error.statusCode === 409);
+      if (!nothingToRelease) throw error;
+      logger.warn('Discharge released no bed', {
+        patientId: String(patientId),
+        reason: error.message,
+      });
+    }
   }
 
   /** @private */

@@ -46,6 +46,12 @@ const paymentSchema = new mongoose.Schema(
  * and `paidCents` is a plain sum — so the money coming back out reduces the
  * original payment row and is recorded here instead. Without this array the only
  * evidence a refund happened would be a shrinking number.
+ *
+ * Unlike the other embedded rows this one keeps its `_id`. `billingService`
+ * writes the row *before* it asks the gateway to release the money and comes back
+ * to stamp the gateway's reference on it afterwards, so it needs to name the
+ * exact row it wrote — two partial refunds of the same payment for the same
+ * amount are otherwise indistinguishable.
  */
 const refundSchema = new mongoose.Schema(
   {
@@ -53,13 +59,13 @@ const refundSchema = new mongoose.Schema(
     method: { type: String, enum: PAYMENT_METHOD_VALUES, required: true },
     /** The `transactionId` of the payment being reversed. */
     paymentRef: { type: String, trim: true },
-    /** The gateway's own reference for the reversal. */
+    /** The gateway's own reference for the reversal. Stamped on once it settles. */
     transactionId: { type: String, trim: true },
     reason: { type: String, trim: true, maxlength: 500 },
     refundedAt: { type: Date, default: Date.now },
     refundedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
-  { _id: false }
+  { _id: true }
 );
 
 const billSchema = new mongoose.Schema(
