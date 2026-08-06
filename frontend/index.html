@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- Patient data must never end up in a referrer header sent to a third party. -->
+    <meta name="referrer" content="no-referrer" />
+    <title>Hospital Management</title>
+    <script>
+      // Applied before first paint so a dark-mode user never sees a white flash.
+      // Only the theme preference is persisted — never anything auth-related.
+      try {
+        var stored = localStorage.getItem('hms.theme');
+        var dark =
+          stored === 'dark' ||
+          (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.classList.add('dark');
+      } catch (_) {
+        /* private mode: fall back to light */
+      }
+    </script>
+  </head>
+  <body class="h-full">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

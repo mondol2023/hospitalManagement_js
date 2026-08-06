@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * One token set, two themes. Components never write `dark:bg-slate-900` — they
+ * write `bg-surface` and the variable underneath changes. See tailwind.config.ts.
+ *
+ * Neutrals are biased cool-green rather than sitting on a pure grey axis, so
+ * they read as chosen alongside the petrol accent instead of inherited.
+ */
+@layer base {
+  :root {
+    --color-canvas: 242 244 242;
+    --color-surface: 255 255 255;
+    --color-surface-raised: 249 251 250;
+    --color-line: 221 226 223;
+    --color-content: 16 26 25;
+    --color-muted: 90 105 102;
+
+    --color-brand: 11 95 92;
+    --color-brand-fg: 255 255 255;
+    --color-brand-soft: 219 236 234;
+
+    /* Reserved ramp. These four hues mean clinical/financial state and are
+       never used decoratively — if red appears on a screen, something is
+       actually wrong. */
+    --color-success: 31 122 77;
+    --color-success-soft: 219 240 228;
+    --color-warning: 154 91 4;
+    --color-warning-soft: 250 236 209;
+    --color-danger: 179 38 30;
+    --color-danger-soft: 250 226 223;
+    --color-info: 44 85 120;
+    --color-info-soft: 223 234 244;
+  }
+
+  .dark {
+    --color-canvas: 11 16 15;
+    --color-surface: 20 26 25;
+    --color-surface-raised: 27 35 33;
+    --color-line: 38 48 46;
+    --color-content: 226 233 230;
+    --color-muted: 141 158 153;
+
+    --color-brand: 79 184 174;
+    --color-brand-fg: 6 22 21;
+    --color-brand-soft: 18 47 45;
+
+    --color-success: 74 190 129;
+    --color-success-soft: 15 45 31;
+    --color-warning: 224 168 62;
+    --color-warning-soft: 51 37 12;
+    --color-danger: 240 116 105;
+    --color-danger-soft: 60 25 22;
+    --color-info: 122 165 208;
+    --color-info-soft: 22 38 52;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-[0.9375rem] leading-relaxed text-content antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display font-semibold tracking-tight;
+    text-wrap: balance;
+  }
+
+  /* Identifiers and quantities line up down a column or they are not
+     comparable, which is the whole reason a ward list exists. */
+  th,
+  td[data-numeric='true'] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A visible focus ring is not optional in a clinical app operated at speed
+     with a keyboard. Never `outline: none` without a replacement. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-canvas;
+  }
+
+  /* Belt-and-braces for the reduced-motion rule in ARCHITECTURE.md §10: the
+     motion layer honours useReducedMotion(), and anything that slips past the
+     React layer (CSS transitions, third-party widgets) is caught here. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* The small tracked uppercase label that sits above every metric and every
+     field. Defined once because it appears on nearly every screen. */
+  .label-eyebrow {
+    @apply font-display text-2xs font-semibold uppercase tracking-label text-muted;
+  }
+
+  /* Quantities: mono, tabular, slightly tightened so a 7-digit invoice number
+     still fits a table cell. */
+  .numeric {
+    @apply font-mono tabular-nums tracking-tight;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--color-line)) transparent;
+  }
+}
