@@ -1,0 +1,122 @@
+/**
+ * Every query key in the app, declared once.
+ *
+ * Cache invalidation is the part of a TanStack Query codebase that rots first:
+ * a mutation invalidates `['patients']` while the list actually cached itself
+ * under `['patient','list']`, nothing refetches, and the bug shows up as
+ * "sometimes the table is stale" months later. Centralising the keys makes
+ * that mismatch a TypeScript error instead of a support ticket.
+ *
+ * Convention: `all` is the broadest prefix for a domain, `list(params)` is a
+ * filtered collection, `detail(id)` is one record. Invalidating `all` catches
+ * every list and detail beneath it, because TanStack matches keys by prefix.
+ */
+
+type Params = Record<string, unknown> | undefined;
+
+export const queryKeys = {
+  patients: {
+    all: ['patients'] as const,
+    list: (params?: Params) => ['patients', 'list', params ?? {}] as const,
+    detail: (id: string) => ['patients', 'detail', id] as const,
+    clinical: (id: string) => ['patients', 'detail', id, 'clinical'] as const,
+    careTeam: (id: string) => ['patients', 'detail', id, 'care-team'] as const,
+    me: ['patients', 'me'] as const,
+    caseload: (params?: Params) => ['patients', 'caseload', params ?? {}] as const,
+  },
+
+  appointments: {
+    all: ['appointments'] as const,
+    list: (params?: Params) => ['appointments', 'list', params ?? {}] as const,
+    detail: (id: string) => ['appointments', 'detail', id] as const,
+    byDoctorDay: (userId: string, date: string) =>
+      ['appointments', 'doctor', userId, 'day', date] as const,
+    byPatient: (patientId: string, params?: Params) =>
+      ['appointments', 'patient', patientId, params ?? {}] as const,
+    availability: (userId: string, date: string) =>
+      ['appointments', 'availability', userId, date] as const,
+  },
+
+  beds: {
+    all: ['beds'] as const,
+    list: (params?: Params) => ['beds', 'list', params ?? {}] as const,
+    detail: (id: string) => ['beds', 'detail', id] as const,
+    occupancy: ['beds', 'occupancy'] as const,
+    wards: ['beds', 'wards'] as const,
+    available: (params?: Params) => ['beds', 'available', params ?? {}] as const,
+  },
+
+  bills: {
+    all: ['bills'] as const,
+    list: (params?: Params) => ['bills', 'list', params ?? {}] as const,
+    detail: (id: string) => ['bills', 'detail', id] as const,
+    byPatient: (patientId: string) => ['bills', 'patient', patientId] as const,
+    outstanding: (params?: Params) => ['bills', 'outstanding', params ?? {}] as const,
+    revenue: (params?: Params) => ['bills', 'revenue', params ?? {}] as const,
+  },
+
+  medicines: {
+    all: ['medicines'] as const,
+    list: (params?: Params) => ['medicines', 'list', params ?? {}] as const,
+    detail: (id: string) => ['medicines', 'detail', id] as const,
+    lowStock: ['medicines', 'low-stock'] as const,
+    expiring: (days: number) => ['medicines', 'expiring', days] as const,
+  },
+
+  emergencies: {
+    all: ['emergencies'] as const,
+    list: (params?: Params) => ['emergencies', 'list', params ?? {}] as const,
+    detail: (id: string) => ['emergencies', 'detail', id] as const,
+    active: (params?: Params) => ['emergencies', 'active', params ?? {}] as const,
+    count: ['emergencies', 'count'] as const,
+  },
+
+  careLogs: {
+    all: ['care-logs'] as const,
+    byPatient: (patientId: string, params?: Params) =>
+      ['care-logs', 'patient', patientId, params ?? {}] as const,
+    latestVitals: (patientId: string) => ['care-logs', 'patient', patientId, 'vitals'] as const,
+    attention: (params?: Params) => ['care-logs', 'attention', params ?? {}] as const,
+    ward: (ward: string) => ['care-logs', 'ward', ward] as const,
+  },
+
+  medicalRecords: {
+    all: ['medical-records'] as const,
+    byPatient: (patientId: string, params?: Params) =>
+      ['medical-records', 'patient', patientId, params ?? {}] as const,
+    detail: (id: string) => ['medical-records', 'detail', id] as const,
+    followUps: (params?: Params) => ['medical-records', 'follow-ups', params ?? {}] as const,
+  },
+
+  chat: {
+    all: ['chat'] as const,
+    inbox: (params?: Params) => ['chat', 'inbox', params ?? {}] as const,
+    conversation: (id: string) => ['chat', 'conversation', id] as const,
+    messages: (id: string) => ['chat', 'conversation', id, 'messages'] as const,
+    unread: ['chat', 'unread'] as const,
+  },
+
+  notifications: {
+    all: ['notifications'] as const,
+    list: (params?: Params) => ['notifications', 'list', params ?? {}] as const,
+    unreadCount: ['notifications', 'unread-count'] as const,
+  },
+
+  analytics: {
+    all: ['analytics'] as const,
+    dashboard: (params?: Params) => ['analytics', 'dashboard', params ?? {}] as const,
+    live: ['analytics', 'live'] as const,
+    occupancy: ['analytics', 'occupancy'] as const,
+    series: (metric: string, params?: Params) =>
+      ['analytics', 'series', metric, params ?? {}] as const,
+    catalogue: ['analytics', 'catalogue'] as const,
+  },
+
+  directory: {
+    all: ['directory'] as const,
+    doctors: (params?: Params) => ['directory', 'doctors', params ?? {}] as const,
+    nurses: (params?: Params) => ['directory', 'nurses', params ?? {}] as const,
+    staff: (params?: Params) => ['directory', 'staff', params ?? {}] as const,
+    specializations: ['directory', 'specializations'] as const,
+  },
+} as const;
