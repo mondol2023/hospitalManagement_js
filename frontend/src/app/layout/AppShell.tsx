@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 
 import { useAuthStore, useProactiveRefresh } from '@/features/auth';
+import { NotificationBell } from '@/features/notifications';
 import { modalOverlay } from '@/shared/motion/variants';
 import { Spinner } from '@/shared/ui';
 
@@ -78,7 +79,7 @@ export function AppShell() {
       </AnimatePresence>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar onOpenNav={() => setNavOpen(true)} />
+        <Topbar onOpenNav={() => setNavOpen(true)} slot={<NotificationBell />} />
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6">
           {/* Route-level code splitting: each feature is its own chunk, so a
               receptionist never downloads the pharmacy screens. */}

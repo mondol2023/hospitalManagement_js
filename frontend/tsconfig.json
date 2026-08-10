@@ -14,6 +14,13 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Mirrors the `@` alias in vite.config.ts. Without it, tsc resolves nothing
+       the app actually imports and the type checker is decorative. */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+
     /* strict: true is the whole point of typing the client against the
        backend's contract — a nullable `data` that is silently `any` defeats it. */
     "strict": true,
