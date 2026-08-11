@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type DefaultValues } from 'react-hook-form';
 import { Link } from 'react-router-dom';
 
 import { applyServerErrors } from '@/shared/lib/form';
@@ -60,7 +60,10 @@ export function RegisterPage() {
         bloodGroup: '',
         emergencyContact: { name: '', relationship: '', phone: '', email: '' },
       },
-    } as Partial<RegisterInput> as RegisterInput,
+      // `DefaultValues` is react-hook-form's own deep-partial: the form starts
+      // with an empty age and no gender chosen, which the resolved `RegisterInput`
+      // would never permit. Zod is what decides these are filled in, on submit.
+    } satisfies DefaultValues<RegisterInput>,
   });
 
   const onSubmit = handleSubmit(async (values) => {

@@ -9,7 +9,7 @@ import {
 
 import { cn } from '@/shared/lib/cn';
 
-import { useFieldControl } from './Field';
+import { useFieldControl } from './field-context';
 
 /**
  * Form controls. All three share one set of surface styles so a select never

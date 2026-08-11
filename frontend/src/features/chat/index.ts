@@ -22,7 +22,8 @@ export {
   useSetArchived,
   useUnreadChat,
 } from './model/use-chat';
-export { ConversationList, conversationTitle } from './ui/ConversationList';
+export { ConversationList } from './ui/ConversationList';
+export { conversationTitle } from './ui/conversation-title';
 export { MessageBubble } from './ui/MessageBubble';
 export { MessagesPage } from './ui/MessagesPage';
 export { NewThreadModal } from './ui/NewThreadModal';

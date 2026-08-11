@@ -1,6 +1,8 @@
-import { createContext, useContext, useId, type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 
 import { cn } from '@/shared/lib/cn';
+
+import { FieldContext } from './field-context';
 
 /**
  * Label + control + help + error, wired together.
@@ -8,19 +10,9 @@ import { cn } from '@/shared/lib/cn';
  * The point of the context is accessibility that cannot be forgotten: the
  * control gets `id`, `aria-describedby` and `aria-invalid` from the field it
  * lives in, so a form built out of these is screen-reader correct by
- * construction rather than by review.
+ * construction rather than by review. The context itself lives in
+ * `field-context.ts`; see the note there for why.
  */
-interface FieldContextValue {
-  controlId: string;
-  describedBy: string | undefined;
-  invalid: boolean;
-}
-
-const FieldContext = createContext<FieldContextValue | null>(null);
-
-export function useFieldControl(): FieldContextValue | null {
-  return useContext(FieldContext);
-}
 
 export interface FieldProps {
   label: string;

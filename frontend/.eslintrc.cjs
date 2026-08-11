@@ -1,5 +1,17 @@
 /* eslint-env node */
 
+const fs = require('node:fs');
+const path = require('node:path');
+
+/**
+ * The feature slices, read from disk so a new one is covered the day it is
+ * created rather than the day somebody remembers to edit this file.
+ */
+const FEATURES = fs
+  .readdirSync(path.join(__dirname, 'src/features'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name);
+
 /**
  * The rule that matters most here is `import/no-restricted-paths`.
  *
@@ -29,7 +41,18 @@ module.exports = {
   },
   rules: {
     'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
-    '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      {
+        argsIgnorePattern: '^_',
+        // `_thing` is the deliberate discard, and `const { secret, ...rest }`
+        // is how a field is dropped from a payload — both are the variable
+        // being unused *on purpose*, which is the opposite of the mistake this
+        // rule exists to catch.
+        varsIgnorePattern: '^_',
+        ignoreRestSiblings: true,
+      },
+    ],
     '@typescript-eslint/consistent-type-imports': [
       'error',
       { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
@@ -52,13 +75,18 @@ module.exports = {
       'error',
       {
         zones: [
-          {
-            target: './src/features',
-            from: './src/features',
-            except: ['./*/index.ts', './*/api.ts', './*/types.ts'],
-            message:
-              'Cross-feature imports must go through the other feature’s public index.ts (ARCHITECTURE.md §4).',
-          },
+          // One zone per slice, because the rule resolves `except` relative to
+          // `from` and has no way to say "a directory may import itself". A
+          // single `features -> features` zone therefore also forbids a slice
+          // its own `./model/...`, which is not the rule ARCHITECTURE.md §4
+          // states. Naming the importing slices instead keeps intra-slice
+          // imports free and leaves exactly one legal door in: `index.ts`.
+          ...FEATURES.map((feature) => ({
+            target: `./src/features/!(${feature})/**/*`,
+            from: `./src/features/${feature}`,
+            except: ['./index.ts'],
+            message: `Import from '@/features/${feature}' — a feature’s internals are private to it (ARCHITECTURE.md §4).`,
+          })),
           {
             target: './src/shared',
             from: './src/features',

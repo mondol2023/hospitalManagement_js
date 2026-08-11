@@ -1,5 +1,5 @@
 /// <reference types="vitest" />
-import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
@@ -7,7 +7,11 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      // Resolved from `import.meta.url` rather than `__dirname`: this file is
+      // ESM ("type": "module"), and keeping Node's globals out means `types`
+      // in tsconfig.json need not pull the Node ambient declarations into the
+      // browser sources, where `process` and `__dirname` do not exist.
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
   server: {

@@ -4,34 +4,10 @@ import { MessagesSquare } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { formatRelative, initials } from '@/shared/lib/format';
 import { staggerItem, staggerList } from '@/shared/motion/variants';
-import { refObject, type Conversation, type User } from '@/shared/types/domain';
+import { type Conversation } from '@/shared/types/domain';
 import { Badge, EmptyState, SkeletonText } from '@/shared/ui';
-import { patientName } from '@/features/patients';
 
-/**
- * A thread's name, worked out rather than stored.
- *
- * Only staff threads carry a title. A care-team thread is named after the
- * patient it is about — that is the thing the reader is scanning for — and a
- * direct thread after the other person, which means resolving "the other
- * person" against the viewer rather than taking participant zero.
- */
-function conversationTitle(conversation: Conversation, viewerId: string | undefined): string {
-  if (conversation.title) return conversation.title;
-
-  if (conversation.type === 'care_team') {
-    const patient = refObject(conversation.patient);
-    return patient ? `${patientName(patient)} · care team` : 'Care team';
-  }
-
-  const others = conversation.participants
-    .map((participant) => refObject(participant))
-    .filter((participant): participant is User => Boolean(participant) && participant?.id !== viewerId);
-
-  if (others.length === 0) return 'Conversation';
-  if (others.length === 1) return others[0]?.name ?? 'Conversation';
-  return `${others[0]?.name} and ${others.length - 1} others`;
-}
+import { conversationTitle } from './conversation-title';
 
 const TYPE_LABEL: Record<Conversation['type'], string> = {
   care_team: 'Care team',
@@ -131,5 +107,3 @@ export function ConversationList({
     </motion.ul>
   );
 }
-
-export { conversationTitle };

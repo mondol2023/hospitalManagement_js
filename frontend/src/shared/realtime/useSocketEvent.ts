@@ -28,9 +28,18 @@ export function useSocketEvent<E extends keyof ServerToClientEvents>(
       (handlerRef.current as (...a: unknown[]) => void)(...args);
     };
 
-    socket.on(event as string, listener);
+    // socket.io's `on` is typed against a literal event name, and a generic `E`
+    // that is only *constrained* to `keyof ServerToClientEvents` never satisfies
+    // it. The narrow view below is where that one unavoidable cast lives; the
+    // signature above is what callers are actually checked against.
+    const loose = socket as unknown as {
+      on(name: string, fn: (...args: unknown[]) => void): void;
+      off(name: string, fn: (...args: unknown[]) => void): void;
+    };
+
+    loose.on(event as string, listener);
     return () => {
-      socket.off(event as string, listener);
+      loose.off(event as string, listener);
     };
   }, [event, enabled]);
 }

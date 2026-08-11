@@ -9,3 +9,15 @@ coverage
 .DS_Store
 .eslintcache
 *.tsbuildinfo
+
+# `tsc` must never emit alongside the sources, and `src/` is TypeScript only.
+# If these reappear, a build script has lost its --noEmit — and because Vite
+# resolves `.js` before `.ts`, the stale compiled copy would silently shadow
+# the component it was built from.
+/src/**/*.js
+/src/**/*.jsx
+
+# Same story for the configs, which are authored as .ts. Vite and Tailwind both
+# probe for a .js config first, so an emitted one silently wins over its source.
+/vite.config.js
+/tailwind.config.js

@@ -12,7 +12,15 @@
  * every list and detail beneath it, because TanStack matches keys by prefix.
  */
 
-type Params = Record<string, unknown> | undefined;
+/**
+ * Deliberately `object` rather than `Record<string, unknown>`.
+ *
+ * Every caller passes a declared interface — `PatientListParams`,
+ * `BedListParams` and so on — and an interface has no implicit index signature,
+ * so `Record<string, unknown>` rejects all of them. The key builders only ever
+ * embed the value in an array, so the shape is genuinely irrelevant here.
+ */
+type Params = object | undefined;
 
 export const queryKeys = {
   patients: {

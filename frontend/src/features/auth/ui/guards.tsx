@@ -85,8 +85,3 @@ export function Can({
   const role = useAuthStore((state) => state.user?.role ?? null);
   return <>{hasRole(role, roles) ? children : fallback}</>;
 }
-
-/** Hook form of `Can`, for when the decision feeds logic rather than JSX. */
-export function useCan(roles: readonly Role[]): boolean {
-  return useAuthStore((state) => hasRole(state.user?.role ?? null, roles));
-}

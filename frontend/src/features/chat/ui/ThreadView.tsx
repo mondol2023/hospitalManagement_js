@@ -14,7 +14,7 @@ import {
   useSendMessage,
   useSetArchived,
 } from '../model/use-chat';
-import { conversationTitle } from './ConversationList';
+import { conversationTitle } from './conversation-title';
 import { MessageBubble } from './MessageBubble';
 
 const MAX_BODY = 5000;

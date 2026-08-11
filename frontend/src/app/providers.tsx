@@ -84,7 +84,15 @@ export function AppProviders({ children }: { children: ReactNode }) {
         them can forget.
       */}
       <MotionConfig reducedMotion="user">
-        <BrowserRouter>
+        {/*
+          Opt in to the two v7 behaviours early. `v7_startTransition` wraps
+          router state updates in `React.startTransition`, and
+          `v7_relativeSplatPath` fixes relative resolution inside splat routes.
+          Both are how v6 behaves once these flags are on, so turning them on
+          now means the eventual v7 bump changes nothing — and it silences the
+          future-flag warnings in the dev console.
+        */}
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           {children}
           <Toaster />
         </BrowserRouter>
