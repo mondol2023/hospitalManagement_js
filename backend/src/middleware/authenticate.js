@@ -122,4 +122,3 @@ module.exports.authenticate = authenticate;
 module.exports.optionalAuthenticate = optionalAuthenticate;
 module.exports.createAuthenticator = createAuthenticator;
 module.exports.resolveActor = resolveActor;
-module.exports.extractToken = extractToken;

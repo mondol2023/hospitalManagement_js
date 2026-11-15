@@ -1,5 +1,6 @@
 'use strict';
 
+const ApiError = require('./ApiError');
 const {
   ROLES,
   STAFF_ROLES,
@@ -117,12 +118,17 @@ function canWriteCareData({ actor, patient, wards }) {
 
 /**
  * Patients may only ever participate in care-team conversations; every other
- * thread kind is staff-walled. Enforced again in `chatService`, because a policy
+ * thread kind is staff-walled. Enforced again in `chatGuard`, because a policy
  * that only the route layer applies is one refactor away from being skipped.
  */
 function canJoinConversation(role, conversationType) {
   if (role === ROLES.PATIENT) return PATIENT_VISIBLE_CONVERSATIONS.includes(conversationType);
   return isStaff(role);
+}
+
+// Throws 403 unless the actor holds one of `roles`; the one place a role allow-list is enforced.
+function assertRole(actor, roles, message) {
+  if (!actor || !roles.includes(actor.role)) throw ApiError.forbidden(message);
 }
 
 module.exports = {
@@ -136,5 +142,6 @@ module.exports = {
   canReadCareData,
   canWriteCareData,
   canJoinConversation,
+  assertRole,
   toId,
 };

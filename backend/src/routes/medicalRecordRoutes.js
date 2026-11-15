@@ -9,6 +9,8 @@ const {
   requireClinician,
   loadPatient,
   reportLimiter,
+  uploadLimiter,
+  manyScans,
   validate,
 } = require('../middleware');
 const { ROLES } = require('../utils/constants');
@@ -75,6 +77,15 @@ router.get(
 );
 
 router.post('/', doctorOnly, validate(schemas.create), controller.create);
+
+router.post(
+  '/:id/attachments',
+  doctorOnly,
+  uploadLimiter,
+  validate(schemas.byId),
+  manyScans(),
+  controller.addAttachments
+);
 
 router.get('/:id', validate(schemas.byId), controller.getById);
 router.patch('/:id', doctorOnly, validate(schemas.update), controller.update);

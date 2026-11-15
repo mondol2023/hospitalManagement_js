@@ -1,24 +1,9 @@
 'use strict';
 
 const { parsePagination, parseSort, buildPage } = require('../utils/pagination');
+const ApiError = require('../utils/ApiError');
 
-/**
- * Shared persistence behaviour for every model.
- *
- * Why this layer exists at all: in the original code every controller talked to
- * Mongoose directly, so `Model.find()` with no pagination, no `lean()` and no
- * field projection appeared a dozen times over. Centralising it means a single
- * place enforces the rules that keep the API alive at 10k users:
- *
- *  - reads are `lean()` by default (no hydration cost, ~3-5x less memory per doc)
- *  - list endpoints are always bounded by `parsePagination`
- *  - sorting is whitelisted per repository, so no caller can trigger an
- *    unindexed in-memory sort by passing `?sort=someRandomField`
- *
- * Subclasses declare *what* they query; this class owns *how*. Services depend
- * on this interface rather than on Mongoose, which is what lets the unit tests
- * substitute a fake repository without a database.
- */
+/** Shared persistence behaviour for every model. */
 class BaseRepository {
   /**
    * @param {import('mongoose').Model} model
@@ -43,20 +28,15 @@ class BaseRepository {
   // --- Writes --------------------------------------------------------------
 
   /**
-   * Creates through the document path (not `insertMany`) so validation and
-   * pre-save hooks — password hashing, MRN generation, care-log auto-flagging —
-   * always run.
+   * Creates through the document path (not `insertMany`) so validation and pre-save hooks —
+   * password hashing, MRN generation, care-log auto-flagging — always run.
    */
   async create(payload, { session } = {}) {
     const [doc] = await this.model.create([payload], { session });
     return doc;
   }
 
-  /**
-   * Updates by id and returns the updated document. Runs validators, which
-   * Mongoose disables on updates by default — the original code's updates could
-   * write values the schema would have rejected on create.
-   */
+  /** Updates by id and returns the updated document. */
   updateById(id, update, { session, lean = true, projection } = {}) {
     const query = this.model
       .findByIdAndUpdate(id, update, { new: true, runValidators: true, context: 'query', session, projection });
@@ -93,6 +73,12 @@ class BaseRepository {
     return this._prepare(this.model.findById(id, projection, { session }), { populate, lean });
   }
 
+  async findByIdOrThrow(id, label = this.name, options) {
+    const doc = await this.findById(id, options);
+    if (!doc) throw ApiError.notFound(label);
+    return doc;
+  }
+
   findOne(filter = {}, { projection, populate, lean = true, sort, session } = {}) {
     const query = this.model.findOne(filter, projection, { session });
     if (sort) query.sort(sort);
@@ -108,15 +94,7 @@ class BaseRepository {
     return this._prepare(query, { populate, lean });
   }
 
-  /**
-   * The standard list endpoint: a bounded page plus its total.
-   *
-   * The count and the fetch are issued concurrently because they are independent
-   * round trips; serialising them doubles the latency of every list screen.
-   *
-   * @param {object} filter
-   * @param {object} query raw `req.query` — `page`, `limit` and `sort`
-   */
+  /** The standard list endpoint: a bounded page plus its total. */
   async paginate(filter = {}, query = {}, { projection, populate, lean = true } = {}) {
     const { page, limit, skip } = parsePagination(query);
     const sort = parseSort(query.sort, this.sortableFields, this.defaultSort);
@@ -129,13 +107,7 @@ class BaseRepository {
     return buildPage({ items, total, page, limit });
   }
 
-  /**
-   * Case-insensitive substring search across `searchableFields`.
-   *
-   * Escapes the input before building the regex: an unescaped user string is
-   * both a correctness bug (a `.` matches anything) and a denial-of-service
-   * vector (a crafted pattern can pin a CPU core for seconds).
-   */
+  /** Case-insensitive substring search across `searchableFields`. */
   searchFilter(term) {
     if (!term || !this.searchableFields.length) return {};
     const escaped = String(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 100);
@@ -157,9 +129,8 @@ class BaseRepository {
   }
 
   /**
-   * Escape hatch for the few places that genuinely need a hydrated document to
-   * mutate and `save()` — bed occupancy, token rotation, care-log
-   * acknowledgement. Named explicitly so those cases stay visible in review.
+   * Escape hatch for the few places that genuinely need a hydrated document to mutate and
+   * `save()` — bed occupancy, token rotation, care-log acknowledgement.
    */
   findDocById(id, { session } = {}) {
     return this.model.findById(id, null, { session }).exec();

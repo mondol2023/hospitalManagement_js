@@ -1,85 +1,50 @@
 'use strict';
 
-const asyncHandler = require('../utils/asyncHandler');
-const { sendSuccess, sendCreated, sendPage } = require('../utils/apiResponse');
+const handle = require('../utils/handle');
 const careLogService = require('../services/careLogService');
 
 /**
- * Every write here resolves the patient from the *body*, so the routes load the
- * patient from `body.patientId` and run the care-team guard before the handler.
- * The service re-checks; the middleware exists so the 403 costs one read rather
- * than the full write path.
+ * patientId` and run the care-team guard before the handler. The service re-checks; the
+ * middleware exists so the 403 costs one read rather than the full write path.
  */
 
-const administerMedication = asyncHandler(async (req, res) => {
-  const log = await careLogService.administerMedication(req.body, req.user);
-  return sendCreated(res, log);
-});
+const administerMedication = handle.created((req) =>
+  careLogService.administerMedication(req.body, req.user)
+);
 
-const recordVitals = asyncHandler(async (req, res) => {
-  const log = await careLogService.recordVitals(req.body, req.user);
-  return sendCreated(res, log);
-});
+const recordVitals = handle.created((req) => careLogService.recordVitals(req.body, req.user));
 
-const logService = asyncHandler(async (req, res) => {
-  const log = await careLogService.logService(req.body, req.user);
-  return sendCreated(res, log);
-});
+const logService = handle.created((req) => careLogService.logService(req.body, req.user));
 
-const logProcedure = asyncHandler(async (req, res) => {
-  const log = await careLogService.logProcedure(req.body, req.user);
-  return sendCreated(res, log);
-});
+const logProcedure = handle.created((req) => careLogService.logProcedure(req.body, req.user));
 
-const logObservation = asyncHandler(async (req, res) => {
-  const log = await careLogService.logObservation(req.body, req.user);
-  return sendCreated(res, log);
-});
+const logObservation = handle.created((req) => careLogService.logObservation(req.body, req.user));
 
-const handover = asyncHandler(async (req, res) => {
-  const log = await careLogService.handover(req.body, req.user);
-  return sendCreated(res, log);
-});
+const handover = handle.created((req) => careLogService.handover(req.body, req.user));
 
-const timeline = asyncHandler(async (req, res) => {
-  const page = await careLogService.timeline(req.patient._id, req.user, req.query);
-  return sendPage(res, page);
-});
+const timeline = handle.page((req) =>
+  careLogService.timeline(req.patient._id, req.user, req.query)
+);
 
-const latestVitals = asyncHandler(async (req, res) => {
-  const data = await careLogService.latestVitals(req.patient._id, req.user);
-  return sendSuccess(res, { data });
-});
+const latestVitals = handle((req) => careLogService.latestVitals(req.patient._id, req.user));
 
-const wardFeed = asyncHandler(async (req, res) => {
-  const page = await careLogService.wardFeed(req.params.ward, req.user, req.query);
-  return sendPage(res, page);
-});
+const wardFeed = handle.page((req) =>
+  careLogService.wardFeed(req.params.ward, req.user, req.query)
+);
 
-const myEntries = asyncHandler(async (req, res) => {
-  const page = await careLogService.myEntries(req.user, req.query);
-  return sendPage(res, page);
-});
+const myEntries = handle.page((req) => careLogService.myEntries(req.user, req.query));
 
-const attentionQueue = asyncHandler(async (req, res) => {
-  const page = await careLogService.attentionQueue(req.user, { ward: req.query.ward }, req.query);
-  return sendPage(res, page);
-});
+const attentionQueue = handle.page((req) =>
+  careLogService.attentionQueue(req.user, { ward: req.query.ward }, req.query)
+);
 
-const getById = asyncHandler(async (req, res) => {
-  const log = await careLogService.getById(req.params.id, req.user);
-  return sendSuccess(res, { data: log });
-});
+const getById = handle((req) => careLogService.getById(req.params.id, req.user));
 
-const acknowledge = asyncHandler(async (req, res) => {
-  const log = await careLogService.acknowledge(req.params.id, req.user, req.body.note);
-  return sendSuccess(res, { data: log });
-});
+const acknowledge = handle((req) =>
+  careLogService.acknowledge(req.params.id, req.user, req.body.note)
+);
 
-const correct = asyncHandler(async (req, res) => {
-  const log = await careLogService.correct(req.params.id, req.body, req.user);
-  return sendCreated(res, log);
-});
+const correct = handle.created((req) => careLogService.correct(req.params.id, req.body, req.user));
 
 module.exports = {
   administerMedication,

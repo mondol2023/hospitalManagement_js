@@ -3,21 +3,11 @@
 const { doctorRepository, appointmentRepository } = require('../repositories');
 const ApiError = require('../utils/ApiError');
 const cacheService = require('./cacheService');
-const { buildKey } = require('./cacheService');
 
 const CACHE_PREFIX = 'doctors';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/**
- * The doctor directory and the availability calculation behind it.
- *
- * Availability is *derived*, never stored. The original code kept a list of free
- * slots on the doctor document and mutated it on every booking, which drifts the
- * moment two requests interleave or an appointment is cancelled outside the
- * happy path. Here the schedule is generated from the doctor's working pattern
- * and subtracted from live appointments at read time, so it cannot go stale —
- * and the calendar itself stays authoritative.
- */
+/** The doctor directory and the availability calculation behind it. */
 class DoctorService {
   constructor({
     doctors = doctorRepository,
@@ -27,6 +17,7 @@ class DoctorService {
     this.doctors = doctors;
     this.appointments = appointments;
     this.cache = cache;
+    this.ns = cache.namespace(CACHE_PREFIX);
   }
 
   /** Public "find a doctor" listing. Cached — it is read constantly, written rarely. */
@@ -35,7 +26,7 @@ class DoctorService {
     if (query.specialization) filter.specialization = query.specialization;
     if (query.department) filter.department = query.department;
 
-    const key = buildKey(`${CACHE_PREFIX}:list`, {
+    const key = this.ns.key('list', {
       specialization: query.specialization,
       department: query.department,
       search: query.search,
@@ -48,10 +39,9 @@ class DoctorService {
   }
 
   async getById(doctorProfileId) {
-    const doctor = await this.doctors.findById(doctorProfileId, {
+    const doctor = await this.doctors.findByIdOrThrow(doctorProfileId, 'Doctor', {
       populate: { path: 'user', select: 'name email phone profilePic' },
     });
-    if (!doctor) throw ApiError.notFound('Doctor');
     return doctor;
   }
 
@@ -66,7 +56,7 @@ class DoctorService {
   /** Distinct specialisations, for the directory filter. Long TTL: this set barely moves. */
   specializations() {
     return this.cache.wrap(
-      buildKey(`${CACHE_PREFIX}:specializations`),
+      this.ns.key('specializations'),
       () => this.doctors.specializations(),
       900
     );
@@ -96,28 +86,18 @@ class DoctorService {
     const doctor = await this.doctors.updateOne({ user: userId }, { $set: update });
     if (!doctor) throw ApiError.notFound('Doctor profile');
 
-    await this.cache.invalidate(CACHE_PREFIX);
+    await this.ns.invalidate();
     return doctor;
   }
 
   async setDuty(userId, isOnDuty) {
     const doctor = await this.doctors.updateOne({ user: userId }, { $set: { isOnDuty } });
     if (!doctor) throw ApiError.notFound('Doctor profile');
-    await this.cache.invalidate(CACHE_PREFIX);
+    await this.ns.invalidate();
     return doctor;
   }
 
-  /**
-   * Free slots for one doctor on one day.
-   *
-   * Not cached: it changes on every booking, and serving a stale slot list
-   * produces a booking that fails at the unique index — a worse experience than
-   * one extra query. `appointmentService` calls this too, so the definition of
-   * "free" exists once.
-   *
-   * @param {string} doctorUserId the doctor's *user* id (appointments reference the user)
-   * @param {string|Date} date any instant inside the requested day
-   */
+  /** Free slots for one doctor on one day. */
   async availability(doctorUserId, date) {
     const doctor = await this.doctors.findDocByUser(doctorUserId);
     if (!doctor) throw ApiError.notFound('Doctor profile');

@@ -9,6 +9,8 @@ const {
   loadPatient,
   requirePatientView,
   requireCareWrite,
+  uploadLimiter,
+  singleImage,
   validate,
 } = require('../middleware');
 const { ROLES } = require('../utils/constants');
@@ -35,6 +37,7 @@ router.use(authenticate);
 
 router.get('/me', controller.me);
 router.patch('/me', validate(schemas.updateOwn), controller.updateOwn);
+router.put('/me/avatar', uploadLimiter, singleImage(), controller.uploadAvatar);
 
 router.get('/', requireStaff, validate(schemas.list), controller.list);
 router.get('/caseload', authorize(ROLES.NURSE), validate(schemas.caseload), controller.caseload);

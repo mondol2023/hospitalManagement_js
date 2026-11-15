@@ -1,48 +1,31 @@
 'use strict';
 
-const { medicineRepository, userRepository } = require('../repositories');
+const { medicineRepository, stockMovementRepository } = require('../repositories');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
-const { ROLES, NOTIFICATION_TYPE } = require('../utils/constants');
+const accessPolicy = require('../utils/accessPolicy');
+const { withTransaction } = require('../utils/transaction');
+const { ROLES, INVENTORY_ROLES, NOTIFICATION_TYPE, STOCK_MOVEMENT } = require('../utils/constants');
 const cacheService = require('./cacheService');
-const { buildKey } = require('./cacheService');
 const notificationService = require('./notificationService');
 
 const CACHE_PREFIX = 'medicines';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const REPORT_DAYS = 30;
 
-/** Who may change what the pharmacy holds. Prescribing is a separate authority. */
-const INVENTORY_ROLES = Object.freeze([ROLES.ADMIN, ROLES.MANAGER, ROLES.PHARMACIST]);
-
-/**
- * Pharmacy inventory.
- *
- * Stock movement is the only interesting part of this service, and it has exactly
- * one rule: **quantity is never read, decided, and then written.** Every movement
- * goes through `deductStock`/`restock`, which are single atomic `$inc`s with the
- * sufficiency check inside the query filter. Two dispensers working the same
- * batch at the same moment is not an edge case in a hospital pharmacy — it is a
- * Tuesday — and a read-then-write check lets both of them pass and drives the
- * count below zero, which the schema then refuses to save, failing whichever
- * request happens to arrive second with a validation error nobody can explain.
- *
- * `dispense` is deliberately low-level and knows nothing about patients. The
- * clinical path — a nurse giving a dose — runs through `careLogService`, which
- * deducts stock as part of the same unit of work that writes the administration
- * record, so the chart and the shelf can never disagree. This method is for the
- * counter: over-the-counter sales, ward top-ups, wastage.
- */
+/** Pharmacy inventory. */
 class MedicineService {
   constructor({
     medicines = medicineRepository,
-    users = userRepository,
+    stockMovements = stockMovementRepository,
     notifications = notificationService,
     cache = cacheService,
   } = {}) {
     this.medicines = medicines;
-    this.users = users;
+    this.stockMovements = stockMovements;
     this.notifications = notifications;
     this.cache = cache;
+    this.ns = cache.namespace(CACHE_PREFIX);
   }
 
   // --- Reads ----------------------------------------------------------------
@@ -65,19 +48,13 @@ class MedicineService {
   }
 
   async getById(medicineId) {
-    const medicine = await this.medicines.findById(medicineId);
-    if (!medicine) throw ApiError.notFound('Medicine');
+    const medicine = await this.medicines.findByIdOrThrow(medicineId, 'Medicine');
     return medicine;
   }
 
-  /**
-   * Items at or below their reorder level.
-   *
-   * Cached for a minute: the query is a `$expr` field-to-field comparison that no
-   * index can serve, and it backs a dashboard tile that several people leave open.
-   */
+  /** Items at or below their reorder level. */
   lowStock() {
-    return this.cache.wrap(buildKey(`${CACHE_PREFIX}:low`), () => this.medicines.lowStock(), 60);
+    return this.cache.wrap(this.ns.key('low'), () => this.medicines.lowStock(), 60);
   }
 
   /** What expires within `days`. Drives the pharmacist's rotation list. */
@@ -86,7 +63,7 @@ class MedicineService {
     if (!Number.isFinite(window) || window < 0) throw ApiError.badRequest('`days` must be a positive number');
     const before = new Date(Date.now() + window * DAY_MS);
     return this.cache.wrap(
-      buildKey(`${CACHE_PREFIX}:expiring`, { days: window }),
+      this.ns.key('expiring', { days: window }),
       () => this.medicines.expiringBefore(before),
       300
     );
@@ -118,7 +95,7 @@ class MedicineService {
         description: payload.description,
         requiresPrescription: payload.requiresPrescription,
       });
-      await this._invalidate();
+      await this.ns.invalidate();
       logger.info('Medicine added', { medicineId: String(medicine._id), name: medicine.name });
       return medicine.toJSON();
     } catch (error) {
@@ -131,14 +108,7 @@ class MedicineService {
     }
   }
 
-  /**
-   * Edits catalogue attributes.
-   *
-   * `quantity` is absent from the whitelist on purpose. Stock changes through
-   * `restock`, `dispense` or `adjust`, each of which is atomic and leaves a reason
-   * in the log; a generic PATCH that sets the count to a number would overwrite
-   * concurrent movements and record nothing about why.
-   */
+  /** Edits catalogue attributes. */
   async update(medicineId, patch = {}, actor) {
     this._assertInventoryStaff(actor);
     if (patch.quantity !== undefined) {
@@ -171,7 +141,7 @@ class MedicineService {
     try {
       const medicine = await this.medicines.updateById(medicineId, { $set: update });
       if (!medicine) throw ApiError.notFound('Medicine');
-      await this._invalidate();
+      await this.ns.invalidate();
       return medicine;
     } catch (error) {
       if (error.code === 11000) {
@@ -183,33 +153,26 @@ class MedicineService {
     }
   }
 
-  /**
-   * Withdraws a batch from circulation.
-   *
-   * Deactivation rather than deletion: the batch is referenced by every care log
-   * and prescription line that ever used it, and those must keep resolving. A
-   * recalled batch simply stops being dispensable.
-   */
+  /** Withdraws a batch from circulation. */
   async deactivate(medicineId, actor) {
     this._assertInventoryStaff(actor);
     const medicine = await this.medicines.updateById(medicineId, { $set: { isActive: false } });
     if (!medicine) throw ApiError.notFound('Medicine');
-    await this._invalidate();
+    await this.ns.invalidate();
     logger.warn('Medicine withdrawn', { medicineId: String(medicineId), by: String(actor.id) });
     return medicine;
   }
 
   async activate(medicineId, actor) {
     this._assertInventoryStaff(actor);
-    const medicine = await this.medicines.findById(medicineId, { projection: 'expiryDate' });
-    if (!medicine) throw ApiError.notFound('Medicine');
+    const medicine = await this.medicines.findByIdOrThrow(medicineId, 'Medicine', { projection: 'expiryDate' });
     if (new Date(medicine.expiryDate).getTime() < Date.now()) {
       throw ApiError.conflict('An expired batch cannot be returned to circulation', {
         code: 'MEDICINE_EXPIRED',
       });
     }
     const updated = await this.medicines.updateById(medicineId, { $set: { isActive: true } });
-    await this._invalidate();
+    await this.ns.invalidate();
     return updated;
   }
 
@@ -218,15 +181,14 @@ class MedicineService {
     if (!actor || actor.role !== ROLES.ADMIN) {
       throw ApiError.forbidden('Only an administrator can delete a catalogue entry');
     }
-    const medicine = await this.medicines.findById(medicineId, { projection: 'quantity name' });
-    if (!medicine) throw ApiError.notFound('Medicine');
+    const medicine = await this.medicines.findByIdOrThrow(medicineId, 'Medicine', { projection: 'quantity name' });
     if (medicine.quantity > 0) {
       throw ApiError.conflict('Stock is still held against this entry — withdraw it instead', {
         code: 'STOCK_ON_HAND',
       });
     }
     await this.medicines.deleteById(medicineId);
-    await this._invalidate();
+    await this.ns.invalidate();
     logger.warn('Medicine deleted', { medicineId: String(medicineId), by: String(actor.id) });
     return { removed: true };
   }
@@ -239,10 +201,10 @@ class MedicineService {
     const units = this._units(quantity, 'quantity');
     if (!units || units < 1) throw ApiError.badRequest('Restock quantity must be at least 1');
 
-    const medicine = await this.medicines.restock(medicineId, units);
+    const medicine = await this._move(medicineId, STOCK_MOVEMENT.RESTOCK, units, actor);
     if (!medicine) throw ApiError.notFound('Medicine');
 
-    await this._invalidate();
+    await this.ns.invalidate();
     logger.info('Stock received', {
       medicineId: String(medicineId),
       units,
@@ -252,30 +214,25 @@ class MedicineService {
     return medicine;
   }
 
-  /**
-   * Goods out over the counter.
-   *
-   * A null return from `deductStock` means the guarded filter matched nothing:
-   * either the id is wrong or there is not enough on the shelf. Both are 409s
-   * against the caller's assumption rather than 500s, and the two are told apart
-   * by a cheap existence check afterwards — cheap because it only runs on the
-   * failure path.
-   */
+  // A null from deductStock/restock means unknown id or too little stock; tell them apart on the failure path only.
+  async _stockConflict(medicineId) {
+    const existing = await this.medicines.findById(medicineId, { projection: 'quantity' });
+    if (!existing) return ApiError.notFound('Medicine');
+    return ApiError.conflict(`Only ${existing.quantity} units are on hand`, {
+      code: 'INSUFFICIENT_STOCK',
+    });
+  }
+
+  // Goods out over the counter.
   async dispense(medicineId, quantity, actor, { reason } = {}) {
     this._assertInventoryStaff(actor);
     const units = this._units(quantity, 'quantity');
     if (!units || units < 1) throw ApiError.badRequest('Dispense quantity must be at least 1');
 
-    const medicine = await this.medicines.deductStock(medicineId, units);
-    if (!medicine) {
-      const existing = await this.medicines.findById(medicineId, { projection: 'quantity' });
-      if (!existing) throw ApiError.notFound('Medicine');
-      throw ApiError.conflict(`Only ${existing.quantity} units are on hand`, {
-        code: 'INSUFFICIENT_STOCK',
-      });
-    }
+    const medicine = await this._move(medicineId, STOCK_MOVEMENT.DISPENSE, -units, actor, reason);
+    if (!medicine) throw await this._stockConflict(medicineId);
 
-    await this._invalidate();
+    await this.ns.invalidate();
     logger.info('Stock dispensed', {
       medicineId: String(medicineId),
       units,
@@ -284,17 +241,11 @@ class MedicineService {
       reason,
     });
 
-    if (medicine.quantity <= medicine.reorderLevel) this._alertLowStock(medicine);
+    if (medicine.quantity <= medicine.reorderLevel) await this.notifications.alertLowStock(medicine);
     return medicine;
   }
 
-  /**
-   * A stock-take correction.
-   *
-   * Separate from restock/dispense because it is the one movement that is not a
-   * real-world transfer, and it always carries a reason — an unexplained
-   * adjustment is indistinguishable from theft.
-   */
+  // Stock-take correction; always needs a reason because it isn't a real transfer.
   async adjust(medicineId, delta, actor, { reason } = {}) {
     this._assertInventoryStaff(actor);
     const change = Number(delta);
@@ -303,20 +254,10 @@ class MedicineService {
     }
     if (!reason) throw ApiError.badRequest('A stock adjustment requires a reason');
 
-    const medicine =
-      change > 0
-        ? await this.medicines.restock(medicineId, change)
-        : await this.medicines.deductStock(medicineId, -change);
+    const medicine = await this._move(medicineId, STOCK_MOVEMENT.ADJUST, change, actor, reason);
+    if (!medicine) throw await this._stockConflict(medicineId);
 
-    if (!medicine) {
-      const existing = await this.medicines.findById(medicineId, { projection: 'quantity' });
-      if (!existing) throw ApiError.notFound('Medicine');
-      throw ApiError.conflict(`Only ${existing.quantity} units are on hand`, {
-        code: 'INSUFFICIENT_STOCK',
-      });
-    }
-
-    await this._invalidate();
+    await this.ns.invalidate();
     logger.warn('Stock adjusted', {
       medicineId: String(medicineId),
       delta: change,
@@ -324,18 +265,82 @@ class MedicineService {
       by: String(actor.id),
       reason,
     });
-    if (medicine.quantity <= medicine.reorderLevel) this._alertLowStock(medicine);
+    if (medicine.quantity <= medicine.reorderLevel) await this.notifications.alertLowStock(medicine);
     return medicine;
+  }
+
+  // Count change and ledger row commit together, so the ledger can never miss a movement.
+  _move(medicineId, kind, delta, actor, reason) {
+    return withTransaction(async (session) => {
+      const medicine =
+        delta > 0
+          ? await this.medicines.restock(medicineId, delta, { session })
+          : await this.medicines.deductStock(medicineId, -delta, { session });
+      if (!medicine) return null;
+
+      await this.stockMovements.create(
+        {
+          medicine: medicineId,
+          kind,
+          delta,
+          onHand: medicine.quantity,
+          actor: accessPolicy.toId(actor.id || actor._id),
+          reason,
+        },
+        { session }
+      );
+      return medicine;
+    });
+  }
+
+  // --- Admin reporting ------------------------------------------------------
+
+  // The ledger, newest first; filters are `medicine`, `kind`, `actor`, `from`, `to`.
+  async movements(query = {}, actor) {
+    this._assertAdmin(actor);
+    const filter = {};
+    for (const field of ['medicine', 'kind', 'actor']) {
+      if (query[field]) filter[field] = query[field];
+    }
+    if (query.from || query.to) {
+      filter.createdAt = {
+        ...(query.from ? { $gte: new Date(query.from) } : {}),
+        ...(query.to ? { $lte: new Date(query.to) } : {}),
+      };
+    }
+    return this.stockMovements.page(filter, query);
+  }
+
+  // One screen answering: what is low, who is told, who last restocked it, who restocks how much.
+  async stockReport({ days = REPORT_DAYS } = {}, actor) {
+    this._assertAdmin(actor);
+    const to = new Date();
+    const from = new Date(to.getTime() - days * DAY_MS);
+
+    const [low, recipients, restockedBy] = await Promise.all([
+      this.medicines.lowStock(),
+      this.notifications.inventoryRecipientUsers(),
+      this.stockMovements.restockedBy({ from, to }),
+    ]);
+
+    const last = new Map(
+      (await this.stockMovements.lastRestocks(low.map((item) => item._id))).map((row) => [
+        String(row._id),
+        { at: row.at, quantity: row.quantity, by: row.actor },
+      ])
+    );
+
+    return {
+      window: { from, to, days },
+      alertRecipients: recipients.map((user) => ({ id: user._id, name: user.name, role: user.role })),
+      lowStock: low.map((item) => ({ ...item, lastRestock: last.get(String(item._id)) || null })),
+      restockedBy,
+    };
   }
 
   // --- Sweeps ---------------------------------------------------------------
 
-  /**
-   * Withdraws everything that has passed its expiry date.
-   *
-   * Idempotent — the filter only matches active batches — so it is safe to run on
-   * any schedule, and safe to run twice if a schedule overlaps.
-   */
+  /** Withdraws everything that has passed its expiry date. */
   async withdrawExpired() {
     const expired = await this.medicines.expiringBefore(new Date());
     if (!expired.length) return { withdrawn: 0 };
@@ -344,7 +349,7 @@ class MedicineService {
       { _id: { $in: expired.map((m) => m._id) } },
       { $set: { isActive: false } }
     );
-    await this._invalidate();
+    await this.ns.invalidate();
 
     logger.warn('Expired stock withdrawn', {
       count: result.modifiedCount || expired.length,
@@ -353,18 +358,12 @@ class MedicineService {
     return { withdrawn: result.modifiedCount || expired.length, items: expired };
   }
 
-  /**
-   * Tells the pharmacy what needs reordering.
-   *
-   * Digest rather than per-item: an inventory that has drifted low across thirty
-   * lines should produce one notification, not thirty, or the pharmacist stops
-   * reading them.
-   */
+  /** Tells the pharmacy what needs reordering. */
   async sendReorderDigest() {
     const items = await this.medicines.lowStock();
     if (!items.length) return { items: 0, notified: 0 };
 
-    const recipients = await this._inventoryRecipients();
+    const recipients = await this.notifications.inventoryRecipients();
     if (!recipients.length) {
       logger.warn('Low stock, but nobody is configured to receive inventory alerts', {
         items: items.length,
@@ -385,11 +384,14 @@ class MedicineService {
 
   // --- internals -----------------------------------------------------------
 
-  /** @private */
-  _assertInventoryStaff(actor) {
-    if (!actor || !INVENTORY_ROLES.includes(actor.role)) {
-      throw ApiError.forbidden('Only pharmacy staff can change inventory');
+  _assertAdmin(actor) {
+    if (!actor || !accessPolicy.isAdmin(actor.role)) {
+      throw ApiError.forbidden('Only an administrator or manager can view stock reports');
     }
+  }
+
+  _assertInventoryStaff(actor) {
+    accessPolicy.assertRole(actor, INVENTORY_ROLES, 'Only pharmacy staff can change inventory');
   }
 
   /** @private a batch that is already expired must not be enterable as new stock. */
@@ -412,42 +414,7 @@ class MedicineService {
     return units;
   }
 
-  /** @private */
-  async _inventoryRecipients() {
-    const users = await this.users.find(
-      { role: { $in: [ROLES.PHARMACIST, ROLES.MANAGER] }, isActive: true },
-      { projection: '_id', lean: true, limit: 50 }
-    );
-    return users.map((user) => user._id);
-  }
-
-  /** @private best-effort: a missed alert must not fail the dispense that caused it. */
-  _alertLowStock(medicine) {
-    logger.warn('Medicine at or below reorder level', {
-      medicine: medicine.name,
-      batchNumber: medicine.batchNumber,
-      quantity: medicine.quantity,
-      reorderLevel: medicine.reorderLevel,
-    });
-
-    this._inventoryRecipients()
-      .then((recipients) => {
-        if (!recipients.length) return null;
-        return this.notifications.notifyMany(recipients, {
-          title: 'Low stock',
-          message: `${medicine.name} (batch ${medicine.batchNumber}) is down to ${medicine.quantity} units.`,
-          type: NOTIFICATION_TYPE.INVENTORY,
-          data: { medicineId: String(medicine._id) },
-        });
-      })
-      .catch((error) => logger.error('Low-stock alert failed', { error: error.message }));
-  }
-
-  /** @private */
-  _invalidate() {
-    return this.cache.invalidate(CACHE_PREFIX);
-  }
-}
+  /** @private */}
 
 module.exports = new MedicineService();
 module.exports.MedicineService = MedicineService;

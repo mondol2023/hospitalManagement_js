@@ -12,29 +12,13 @@ const {
   NOTIFICATION_TYPE,
 } = require('../utils/constants');
 const cacheService = require('./cacheService');
-const { buildKey } = require('./cacheService');
 const realtimeService = require('./realtimeService');
 const careLogService = require('./careLogService');
 const notificationService = require('./notificationService');
 
 const CACHE_PREFIX = 'beds';
 
-/**
- * Bed inventory and admission.
- *
- * The requirement — "nurses can register beds for patients" — is the `assign`
- * method, and the whole design of this service exists to make it safe. Claiming a
- * bed is a compare-and-set inside the database (`occupyIfFree`), never a read
- * followed by a write: two nurses admitting simultaneously would both pass a
- * read-then-check and the second would silently evict the first patient. Here the
- * loser's filter simply matches nothing and gets a 409.
- *
- * Admission touches two collections (the bed and the patient). Where the
- * deployment supports transactions they commit together; where it does not — a
- * standalone dev/test MongoDB — the bed claim is compensated by hand, because a
- * bed marked occupied for a patient who was never admitted is a bed nobody can
- * ever use again.
- */
+/** Bed inventory and admission. */
 class BedService {
   constructor({
     beds = bedRepository,
@@ -50,6 +34,7 @@ class BedService {
     this.notifications = notifications;
     this.realtime = realtime;
     this.cache = cache;
+    this.ns = cache.namespace(CACHE_PREFIX);
   }
 
   list(query = {}) {
@@ -65,7 +50,7 @@ class BedService {
   /** Free beds. Short TTL: it is polled by the admissions screen and moves often. */
   available({ ward, type } = {}) {
     return this.cache.wrap(
-      buildKey(`${CACHE_PREFIX}:available`, { ward, type }),
+      this.ns.key('available', { ward, type }),
       () => this.beds.findAvailable({ ward, type }),
       30
     );
@@ -73,18 +58,17 @@ class BedService {
 
   /** Ward occupancy board. */
   occupancy() {
-    return this.cache.wrap(buildKey(`${CACHE_PREFIX}:occupancy`), () => this.beds.occupancyByWard(), 60);
+    return this.cache.wrap(this.ns.key('occupancy'), () => this.beds.occupancyByWard(), 60);
   }
 
   wards() {
-    return this.cache.wrap(buildKey(`${CACHE_PREFIX}:wards`), () => this.beds.wards(), 900);
+    return this.cache.wrap(this.ns.key('wards'), () => this.beds.wards(), 900);
   }
 
   async getById(bedId) {
-    const bed = await this.beds.findById(bedId, {
+    const bed = await this.beds.findByIdOrThrow(bedId, 'Bed', {
       populate: { path: 'patient', select: 'medicalRecordNumber user ward' },
     });
-    if (!bed) throw ApiError.notFound('Bed');
     return bed;
   }
 
@@ -98,7 +82,7 @@ class BedService {
         dailyRate: payload.dailyRate,
         notes: payload.notes,
       });
-      await this._invalidate();
+      await this.ns.invalidate();
       return bed.toJSON();
     } catch (error) {
       if (error.code === 11000) {
@@ -119,22 +103,16 @@ class BedService {
 
     const bed = await this.beds.updateById(bedId, { $set: update });
     if (!bed) throw ApiError.notFound('Bed');
-    await this._invalidate();
+    await this.ns.invalidate();
     return bed;
   }
 
-  /**
-   * Housekeeping status: cleaning → available, available → maintenance, and so
-   * on. `occupied` is refused: occupancy is a consequence of admitting a patient,
-   * and letting it be set directly is how the original code produced occupied
-   * beds with no patient attached.
-   */
+  /** Housekeeping status: cleaning → available, available → maintenance, and so on. */
   async setStatus(bedId, status) {
     if (status === BED_STATUS.OCCUPIED) {
       throw ApiError.badRequest('Assign a patient to occupy a bed', { code: 'USE_ASSIGN' });
     }
-    const bed = await this.beds.findById(bedId, { projection: 'status patient ward bedNumber' });
-    if (!bed) throw ApiError.notFound('Bed');
+    const bed = await this.beds.findByIdOrThrow(bedId, 'Bed', { projection: 'status patient ward bedNumber' });
     if (bed.status === BED_STATUS.OCCUPIED) {
       throw ApiError.conflict('Release the patient before changing this bed’s status');
     }
@@ -142,24 +120,16 @@ class BedService {
     const updated = await this.beds.updateById(bedId, {
       $set: { status, patient: null, occupiedAt: null },
     });
-    await this._invalidate();
+    await this.ns.invalidate();
     this.realtime.toStaff(SOCKET_EVENTS.BED_UPDATED, updated);
     return updated;
   }
 
-  /**
-   * Admits a patient into a bed.
-   *
-   * @param {object} args
-   * @param {string} args.bedId
-   * @param {string} args.patientId
-   * @param {object} args.actor the nurse (or admitting clerk) performing this
-   */
+  /** Admits a patient into a bed. */
   async assign({ bedId, patientId }, actor) {
-    const patient = await this.patients.findById(patientId, {
+    const patient = await this.patients.findByIdOrThrow(patientId, 'Patient', {
       projection: 'medicalRecordNumber user bed ward isAdmitted',
     });
-    if (!patient) throw ApiError.notFound('Patient');
     if (patient.bed) {
       throw ApiError.conflict('This patient already occupies a bed — transfer instead', {
         code: 'ALREADY_ADMITTED',
@@ -207,7 +177,7 @@ class BedService {
 
     await this._recordBedEvent(patient, bed, actor, `Admitted to bed ${bed.bedNumber}`);
 
-    await this._invalidate();
+    await this.ns.invalidate();
     this.realtime.toStaff(SOCKET_EVENTS.BED_UPDATED, bed);
 
     logger.info('Bed assigned', {
@@ -223,10 +193,9 @@ class BedService {
    * target turns out to be taken the patient still has the bed they started in.
    */
   async transfer({ patientId, toBedId }, actor) {
-    const patient = await this.patients.findById(patientId, {
+    const patient = await this.patients.findByIdOrThrow(patientId, 'Patient', {
       projection: 'medicalRecordNumber user bed ward',
     });
-    if (!patient) throw ApiError.notFound('Patient');
     if (!patient.bed) throw ApiError.badRequest('This patient is not currently in a bed');
     if (String(patient.bed) === String(toBedId)) {
       throw ApiError.badRequest('The patient is already in that bed');
@@ -252,7 +221,7 @@ class BedService {
 
     await this._recordBedEvent(patient, target, actor, `Transferred to bed ${target.bedNumber}`);
 
-    await this._invalidate();
+    await this.ns.invalidate();
     this.realtime.toStaff(SOCKET_EVENTS.BED_UPDATED, target);
     logger.info('Patient transferred', {
       patientId: String(patientId),
@@ -262,17 +231,11 @@ class BedService {
     return target;
   }
 
-  /**
-   * Frees the bed a patient occupies. Called on discharge and when a bed is
-   * vacated for any other reason; the bed goes to `cleaning`, not straight back
-   * to `available`, because a bed that has just been used is not ready for the
-   * next patient.
-   */
+  /** Frees the bed a patient occupies. */
   async release(patientId, actor) {
-    const patient = await this.patients.findById(patientId, {
+    const patient = await this.patients.findByIdOrThrow(patientId, 'Patient', {
       projection: 'medicalRecordNumber user bed ward',
     });
-    if (!patient) throw ApiError.notFound('Patient');
     if (!patient.bed) throw ApiError.badRequest('This patient is not currently in a bed');
 
     const bed = await this.beds.release(patient.bed, patientId);
@@ -282,7 +245,7 @@ class BedService {
 
     await this._recordBedEvent(patient, bed, actor, `Released bed ${bed.bedNumber}`);
 
-    await this._invalidate();
+    await this.ns.invalidate();
     this.realtime.toStaff(SOCKET_EVENTS.BED_UPDATED, bed);
     logger.info('Bed released', { bedId: String(bed._id), patientId: String(patientId) });
     return bed;
@@ -290,13 +253,12 @@ class BedService {
 
   /** Removing inventory. Refused while a patient is in it, for obvious reasons. */
   async remove(bedId) {
-    const bed = await this.beds.findById(bedId, { projection: 'status' });
-    if (!bed) throw ApiError.notFound('Bed');
+    const bed = await this.beds.findByIdOrThrow(bedId, 'Bed', { projection: 'status' });
     if (bed.status === BED_STATUS.OCCUPIED) {
       throw ApiError.conflict('An occupied bed cannot be removed');
     }
     await this.beds.deleteById(bedId);
-    await this._invalidate();
+    await this.ns.invalidate();
     return { removed: true };
   }
 
@@ -353,11 +315,7 @@ class BedService {
     }
   }
 
-  /** @private */
-  _invalidate() {
-    return this.cache.invalidate(CACHE_PREFIX);
-  }
-}
+  /** @private */}
 
 module.exports = new BedService();
 module.exports.BedService = BedService;

@@ -1,61 +1,36 @@
 'use strict';
 
 const asyncHandler = require('../utils/asyncHandler');
-const { sendSuccess, sendCreated, sendPage } = require('../utils/apiResponse');
+const handle = require('../utils/handle');
+const { sendSuccess } = require('../utils/apiResponse');
 const chatService = require('../services/chatService');
 
-/**
- * Messaging over HTTP.
- *
- * The socket gateway calls the same service methods with the same arguments, so
- * nothing here may add behaviour — a rule that would otherwise be invisible to a
- * client connected over the websocket.
- */
+/** Messaging over HTTP. */
 
-const inbox = asyncHandler(async (req, res) => {
-  const page = await chatService.inbox(req.user, req.query);
-  return sendPage(res, page);
-});
+const inbox = handle.page((req) => chatService.inbox(req.user, req.query));
 
-const unread = asyncHandler(async (req, res) => {
-  const data = await chatService.unreadSummary(req.user);
-  return sendSuccess(res, { data });
-});
+const unread = handle((req) => chatService.unreadSummary(req.user));
 
-const getById = asyncHandler(async (req, res) => {
-  const conversation = await chatService.getById(req.params.id, req.user);
-  return sendSuccess(res, { data: conversation });
-});
+const getById = handle((req) => chatService.getById(req.params.id, req.user));
 
 /** Keyset paging — the response is a plain array, newest first, not a page envelope. */
-const history = asyncHandler(async (req, res) => {
-  const messages = await chatService.history(req.params.id, req.user, req.query);
-  return sendSuccess(res, { data: messages });
-});
+const history = handle((req) => chatService.history(req.params.id, req.user, req.query));
 
 /**
  * Find-or-create, so a repeat call is not an error. Both outcomes answer 201:
  * the caller wanted a usable channel and has one either way.
  */
-const openCareTeam = asyncHandler(async (req, res) => {
-  const conversation = await chatService.openCareTeam(req.params.patientId, req.user);
-  return sendCreated(res, conversation);
-});
+const openCareTeam = handle.created((req) =>
+  chatService.openCareTeam(req.params.patientId, req.user)
+);
 
-const createStaffThread = asyncHandler(async (req, res) => {
-  const conversation = await chatService.createStaffThread(req.body, req.user);
-  return sendCreated(res, conversation);
-});
+const createStaffThread = handle.created((req) =>
+  chatService.createStaffThread(req.body, req.user)
+);
 
-const openDirect = asyncHandler(async (req, res) => {
-  const conversation = await chatService.openDirect(req.body.userId, req.user);
-  return sendCreated(res, conversation);
-});
+const openDirect = handle.created((req) => chatService.openDirect(req.body.userId, req.user));
 
-const send = asyncHandler(async (req, res) => {
-  const message = await chatService.send(req.params.id, req.body, req.user);
-  return sendCreated(res, message);
-});
+const send = handle.created((req) => chatService.send(req.params.id, req.body, req.user));
 
 const markRead = asyncHandler(async (req, res) => {
   const data = await chatService.markRead(req.params.id, req.user, req.body.at);
@@ -81,10 +56,9 @@ const removeParticipant = asyncHandler(async (req, res) => {
   return sendSuccess(res, { data: conversation, message: 'Participant removed' });
 });
 
-const setArchived = asyncHandler(async (req, res) => {
-  const conversation = await chatService.setArchived(req.params.id, req.body.isArchived, req.user);
-  return sendSuccess(res, { data: conversation });
-});
+const setArchived = handle((req) =>
+  chatService.setArchived(req.params.id, req.body.isArchived, req.user)
+);
 
 module.exports = {
   inbox,

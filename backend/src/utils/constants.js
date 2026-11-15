@@ -39,6 +39,9 @@ const CARE_TEAM_ROLES = CLINICAL_ROLES;
 /** Roles with unrestricted administrative reach. */
 const ADMIN_ROLES = Object.freeze([ROLES.ADMIN, ROLES.MANAGER]);
 
+/** Who may change pharmacy stock, and who is told when it runs low. */
+const INVENTORY_ROLES = Object.freeze([ROLES.ADMIN, ROLES.MANAGER, ROLES.PHARMACIST]);
+
 /** Profile collection backing each role, used by the registration service. */
 const ROLE_PROFILE_MODEL = Object.freeze({
   [ROLES.DOCTOR]: 'Doctor',
@@ -152,6 +155,17 @@ const NOTIFICATION_TYPE = Object.freeze({
   MESSAGE: 'message',
   SYSTEM: 'system',
 });
+
+/** Why a medicine's count changed; one ledger row per movement. */
+const STOCK_MOVEMENT = Object.freeze({
+  RESTOCK: 'restock',
+  DISPENSE: 'dispense',
+  ADJUST: 'adjust',
+  ADMINISTERED: 'administered',
+  RESTORED: 'restored',
+});
+
+const STOCK_MOVEMENT_VALUES = Object.freeze(Object.values(STOCK_MOVEMENT));
 
 const NOTIFICATION_TYPE_VALUES = Object.freeze(Object.values(NOTIFICATION_TYPE));
 
@@ -283,6 +297,7 @@ module.exports = {
   CLINICAL_ROLES,
   CARE_TEAM_ROLES,
   ADMIN_ROLES,
+  INVENTORY_ROLES,
   ROLE_PROFILE_MODEL,
   SHIFTS,
   SHIFT_VALUES,
@@ -301,6 +316,8 @@ module.exports = {
   BILL_STATUS_VALUES,
   PAYMENT_METHOD,
   PAYMENT_METHOD_VALUES,
+  STOCK_MOVEMENT,
+  STOCK_MOVEMENT_VALUES,
   NOTIFICATION_TYPE,
   NOTIFICATION_TYPE_VALUES,
   NOTIFICATION_CHANNEL,
@@ -311,7 +328,6 @@ module.exports = {
   MEDICATION_STATUS_VALUES,
   MEDICATION_ROUTE,
   MEDICATION_ROUTE_VALUES,
-  SERVICE_CATEGORY,
   SERVICE_CATEGORY_VALUES,
   CONVERSATION_TYPE,
   CONVERSATION_TYPE_VALUES,

@@ -7,15 +7,9 @@ const accessPolicy = require('../utils/accessPolicy');
 const { ROLES, NOTIFICATION_TYPE } = require('../utils/constants');
 const notificationService = require('./notificationService');
 const bedService = require('./bedService');
+const storageProvider = require('./providers/storageProvider');
 
-/**
- * Patient records and care-team composition.
- *
- * The access decisions all delegate to `utils/accessPolicy`, so this service
- * decides *what* to load and the policy decides *who may see it*. That split is
- * what keeps the same rule enforceable from the REST layer and the socket layer
- * without duplicating it.
- */
+/** Patient records and care-team composition. */
 class PatientService {
   constructor({
     patients = patientRepository,
@@ -23,24 +17,21 @@ class PatientService {
     users = userRepository,
     notifications = notificationService,
     beds = bedService,
+    storage = storageProvider,
   } = {}) {
     this.patients = patients;
     this.nurses = nurses;
     this.users = users;
     this.notifications = notifications;
     this.beds = beds;
+    this.storage = storage;
   }
 
-  /**
-   * Loads a patient and asserts the actor may see it. Every read path in this
-   * service — and in the care-log and record services — funnels through here, so
-   * there is exactly one place an authorisation bug could live.
-   */
+  /** Loads a patient and asserts the actor may see it. */
   async requireVisible(patientId, actor) {
-    const patient = await this.patients.findById(patientId, {
+    const patient = await this.patients.findByIdOrThrow(patientId, 'Patient', {
       populate: { path: 'user', select: 'name email phone profilePic' },
     });
-    if (!patient) throw ApiError.notFound('Patient');
     if (!accessPolicy.canViewPatient(actor, patient)) {
       throw ApiError.forbidden('You do not have access to this patient');
     }
@@ -108,6 +99,15 @@ class PatientService {
     return patient;
   }
 
+  /** Replaces the patient's own profile picture (stored on the user account). */
+  async setAvatar(userId, file) {
+    if (!file) throw ApiError.badRequest('An image file is required');
+    await this.requireOwnRecord(userId);
+    const { url } = await this.storage.upload(file, { folder: 'avatars' });
+    const user = await this.users.updateById(userId, { $set: { profilePic: url } });
+    return { profilePic: user.profilePic };
+  }
+
   /** Clinician-editable chart fields. */
   async updateClinicalDetails(patientId, patch = {}) {
     const allowed = [
@@ -127,13 +127,7 @@ class PatientService {
     return patient;
   }
 
-  /**
-   * Adds nurses to the care team.
-   *
-   * Each id is verified to belong to an active nurse first: `$addToSet` would
-   * happily store a doctor's id — or a typo — and the care-team check would then
-   * silently grant or withhold access based on garbage.
-   */
+  /** Adds nurses to the care team. */
   async assignNurses(patientId, nurseUserIds, actor) {
     const ids = [...new Set((nurseUserIds || []).filter(Boolean).map(String))];
     if (!ids.length) throw ApiError.badRequest('At least one nurse is required');
@@ -198,31 +192,16 @@ class PatientService {
    * decide who a flagged observation should page.
    */
   async careTeam(patientId) {
-    const patient = await this.patients.findById(patientId, {
+    const patient = await this.patients.findByIdOrThrow(patientId, 'Patient', {
       projection: 'user primaryDoctor assignedNurses medicalRecordNumber',
     });
-    if (!patient) throw ApiError.notFound('Patient');
     return {
       patientUserId: accessPolicy.toId(patient.user),
       clinicianUserIds: accessPolicy.careTeamIds(patient),
     };
   }
 
-  /**
-   * Discharge.
-   *
-   * The bed is released first, through `bedService`, because that is the service
-   * that understands bed state: it flips the bed to `cleaning`, charts the
-   * movement and tells the ward boards. Clearing `patient.bed` here without it
-   * would leave the bed document marked `occupied` by a patient who has gone
-   * home — and `release` refuses to run once the pointer is gone, so nothing
-   * could ever free it again.
-   *
-   * Two cases are not failures and must not block a discharge:
-   * an outpatient who never held a bed, and a stale pointer to a bed some other
-   * patient now holds. Both leave nothing to release; the stay still closes, and
-   * the `$unset` below clears the pointer either way.
-   */
+  /** Discharge. */
   async discharge(patientId, { summary } = {}, actor) {
     await this._releaseBed(patientId, actor);
 

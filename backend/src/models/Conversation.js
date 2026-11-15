@@ -23,7 +23,7 @@ const { CONVERSATION_TYPE, CONVERSATION_TYPE_VALUES } = require('../utils/consta
  * pre-validate hook would mean a `User` lookup per participant on every single
  * save. The rule lives in `accessPolicy.canJoinConversation` and is applied at
  * the three points that can change membership or expose a thread: creation,
- * `addParticipant`, and every read (`chatService._requireMember`).
+ * `addParticipant`, and every read (`chatGuard.requireMember`).
  *
  * Read state lives here rather than on each message: a per-participant
  * `lastReadAt` is one small array on one document, whereas a `readBy` array on

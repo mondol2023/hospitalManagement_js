@@ -9,23 +9,7 @@ const tokenService = require('./tokenService');
 const { TokenService } = require('./tokenService');
 const profileService = require('./profileService');
 
-/**
- * Registration, login and the token lifecycle.
- *
- * Deliberate behaviours, each fixing something the previous implementation got
- * wrong:
- *
- *  - **Public registration can only create patients.** The old handler passed
- *    `req.body.role` straight into the model, so anyone could POST
- *    `{"role":"admin"}` and own the hospital. Staff accounts are created by an
- *    admin through `userService`, never here.
- *  - **Login answers identically for an unknown email and a wrong password.**
- *    Distinct messages turn the endpoint into a user-enumeration oracle.
- *  - **Refresh rotates.** The spent token is denylisted as the new pair is
- *    issued, so a stolen refresh token is usable at most once — and if the
- *    attacker uses it first, the legitimate user's next refresh fails loudly
- *    instead of the theft going unnoticed forever.
- */
+/** Registration, login and the token lifecycle. */
 class AuthService {
   constructor({ users = userRepository, tokens = tokenService, profiles = profileService } = {}) {
     this.users = users;
@@ -33,12 +17,7 @@ class AuthService {
     this.profiles = profiles;
   }
 
-  /**
-   * Public signup. Always creates a `patient` plus its Patient profile.
-   *
-   * @param {object} input
-   * @param {object} [input.profile] patient fields (age, gender, bloodGroup, …)
-   */
+  /** Public signup. Always creates a `patient` plus its Patient profile. */
   async register({ name, email, password, phone, address, profile = {} }) {
     if (await this.users.emailExists(email)) {
       throw ApiError.conflict('An account with that email already exists', {
@@ -106,22 +85,13 @@ class AuthService {
     return { user: user.toJSON(), ...this.tokens.issueTokens(user) };
   }
 
-  /**
-   * Exchanges a refresh token for a fresh pair.
-   *
-   * Every rejection here is a 401 with a distinct `code`, because the client
-   * needs to tell "expired, refresh again" from "revoked, send them to login".
-   */
+  /** Exchanges a refresh token for a fresh pair. */
   async refresh(refreshToken) {
     if (!refreshToken) {
       throw ApiError.unauthorized('Refresh token is required', { code: 'TOKEN_MISSING' });
     }
 
     const payload = this.tokens.verifyRefreshToken(refreshToken);
-
-    if (await this.tokens.isRefreshRevoked(payload.jti)) {
-      throw ApiError.unauthorized('This session has been revoked', { code: 'TOKEN_REVOKED' });
-    }
 
     const user = await this.users.findActiveById(payload.sub);
     if (!user) {
@@ -134,8 +104,8 @@ class AuthService {
       });
     }
 
-    // Burn the presented token before handing out its replacement.
-    await this.tokens.revokeRefreshToken(payload);
+    // Atomic spend before issuing: a concurrent replay of the same token loses.
+    await this.tokens.consumeRefreshToken(payload);
 
     // `findActiveById` is projected for the auth middleware, which needs the
     // revocation watermark. The client does not, and it is an internal
@@ -144,28 +114,20 @@ class AuthService {
     return { user: safeUser, ...this.tokens.issueTokens(user) };
   }
 
-  /**
-   * Ends one session. Verification failures are swallowed: logging out with an
-   * already-expired token is a no-op, not an error the user should have to
-   * resolve before they can sign in again.
-   */
+  /** Ends one session. */
   async logout(refreshToken) {
     if (!refreshToken) return { revoked: false };
     try {
       const payload = this.tokens.verifyRefreshToken(refreshToken);
-      await this.tokens.revokeRefreshToken(payload);
-      return { revoked: true };
+      // False when Redis is off: report it rather than claim a revocation.
+      return { revoked: Boolean(await this.tokens.revokeRefreshToken(payload)) };
     } catch (error) {
       logger.debug('Logout with an unusable refresh token', { error: error.message });
       return { revoked: false };
     }
   }
 
-  /**
-   * Ends every session by moving the `tokensValidFrom` watermark. Unlike the
-   * denylist this works with Redis down, which is why account-wide revocation
-   * uses it rather than enumerating tokens.
-   */
+  /** Ends every session by moving the `tokensValidFrom` watermark. */
   async logoutEverywhere(userId) {
     await this.users.revokeTokens(userId);
     logger.info('All sessions revoked', { userId: String(userId) });
@@ -173,9 +135,8 @@ class AuthService {
   }
 
   /**
-   * The `User` pre-save hook re-hashes the password and bumps `tokensValidFrom`,
-   * so changing a password logs every other device out as a side effect. The
-   * caller gets a fresh pair so *their* session survives.
+   * The `User` pre-save hook re-hashes the password and bumps `tokensValidFrom`, so changing a
+   * password logs every other device out as a side effect.
    */
   async changePassword(userId, { currentPassword, newPassword }) {
     const user = await this.users.findByIdWithPassword(userId);
@@ -199,8 +160,7 @@ class AuthService {
 
   /** Current user plus their role-specific profile, for `GET /auth/me`. */
   async me(userId) {
-    const user = await this.users.findById(userId);
-    if (!user) throw ApiError.notFound('User');
+    const user = await this.users.findByIdOrThrow(userId, 'User');
     return this.profiles.withProfile(user);
   }
 }

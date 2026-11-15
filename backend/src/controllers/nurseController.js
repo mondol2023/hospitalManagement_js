@@ -1,47 +1,22 @@
 'use strict';
 
-const asyncHandler = require('../utils/asyncHandler');
-const { sendSuccess, sendPage } = require('../utils/apiResponse');
+const handle = require('../utils/handle');
 const nurseService = require('../services/nurseService');
 
-const list = asyncHandler(async (req, res) => {
-  const page = await nurseService.list(req.query);
-  return sendPage(res, page);
-});
+const list = handle.page((req) => nurseService.list(req.query));
 
-const me = asyncHandler(async (req, res) => {
-  const nurse = await nurseService.getByUser(req.user.id);
-  return sendSuccess(res, { data: nurse });
-});
+const me = handle((req) => nurseService.getByUser(req.user.id));
 
-const updateOwn = asyncHandler(async (req, res) => {
-  const nurse = await nurseService.updateOwnProfile(req.user.id, req.body);
-  return sendSuccess(res, { data: nurse });
-});
+const updateOwn = handle((req) => nurseService.updateOwnProfile(req.user.id, req.body));
 
-const setDuty = asyncHandler(async (req, res) => {
-  const nurse = await nurseService.setDuty(req.user.id, req.body.isOnDuty);
-  return sendSuccess(res, { data: nurse });
-});
+const setDuty = handle((req) => nurseService.setDuty(req.user.id, req.body.isOnDuty));
 
-const workload = asyncHandler(async (req, res) => {
-  const data = await nurseService.workload(req.user.id);
-  return sendSuccess(res, { data });
-});
+const workload = handle((req) => nurseService.workload(req.user.id));
 
-const getByUser = asyncHandler(async (req, res) => {
-  const nurse = await nurseService.getByUser(req.params.userId);
-  return sendSuccess(res, { data: nurse });
-});
+const getByUser = handle((req) => nurseService.getByUser(req.params.userId));
 
-const onDutyInWard = asyncHandler(async (req, res) => {
-  const data = await nurseService.onDutyInWard(req.params.ward);
-  return sendSuccess(res, { data });
-});
+const onDutyInWard = handle((req) => nurseService.onDutyInWard(req.params.ward));
 
-const updateRoster = asyncHandler(async (req, res) => {
-  const nurse = await nurseService.updateRoster(req.params.id, req.body);
-  return sendSuccess(res, { data: nurse });
-});
+const updateRoster = handle((req) => nurseService.updateRoster(req.params.id, req.body));
 
 module.exports = { list, me, updateOwn, setDuty, workload, getByUser, onDutyInWard, updateRoster };

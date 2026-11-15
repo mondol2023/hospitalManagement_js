@@ -8,6 +8,7 @@ const env = require('./config/env');
 const logger = require('./config/logger');
 const { connectDatabase, disconnectDatabase, ensureIndexes } = require('./config/database');
 const { disconnectRedis } = require('./config/redis');
+const { assertTransactionSupport } = require('./utils/transaction');
 const createApp = require('./app');
 const { createSocketServer, closeSocketServer } = require('./sockets');
 
@@ -106,6 +107,7 @@ function runPrimary() {
  */
 async function startWorker({ port = env.PORT } = {}) {
   await connectDatabase();
+  await assertTransactionSupport();
 
   // Outside production, boot doubles as the migration step so a fresh clone has
   // its indexes. In production the same call belongs to a deploy task: N workers

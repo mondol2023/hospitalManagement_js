@@ -24,5 +24,6 @@ module.exports = {
   nurseRepository: require('./nurseRepository'),
   patientRepository: require('./patientRepository'),
   staffRepository: require('./staffRepository'),
+  stockMovementRepository: require('./stockMovementRepository'),
   userRepository: require('./userRepository'),
 };

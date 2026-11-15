@@ -1,24 +1,12 @@
 'use strict';
 
 const mongoose = require('mongoose');
+const env = require('../config/env');
 const logger = require('../config/logger');
 
-/**
- * Runs a unit of work in a transaction *when the deployment supports one*.
- *
- * MongoDB only offers multi-document transactions on a replica set or a sharded
- * cluster. Calling `startTransaction()` against a standalone `mongod` — which is
- * what a developer laptop and a default `mongodb-memory-server` both are — throws
- * `IllegalOperation`. Hard-coding sessions would make the app unrunnable outside
- * production; ignoring them would make production lose atomicity silently.
- *
- * So support is probed once against the live connection and cached. When
- * transactions are available the callback gets a session and everything commits
- * or rolls back together; when they are not, the callback gets `null` and the
- * repositories simply run unsessioned. Every call site passes the session
- * through, so promoting a deployment to a replica set makes those writes atomic
- * with no code change.
- */
+// Runs `fn` in a transaction when the deployment supports one, else with a null
+// session (standalone dev/test mongod). Call sites pass the session through, so
+// moving to a replica set makes those writes atomic with no code change.
 
 let supported = null;
 
@@ -36,27 +24,39 @@ async function detectTransactionSupport(connection = mongoose.connection) {
 }
 
 /**
+ * Probes once at boot. In production a standalone deployment is fatal, because
+ * multi-document writes (payments, dispensing) would silently lose atomicity.
+ */
+async function assertTransactionSupport({
+  connection = mongoose.connection,
+  required = env.requireTransactions,
+} = {}) {
+  supported = await detectTransactionSupport(connection);
+  if (supported) return true;
+
+  if (required) {
+    throw new Error(
+      'MongoDB does not support transactions (needs a replica set or mongos). ' +
+        'Fix the deployment, or set MONGO_REQUIRE_TRANSACTIONS=false to accept non-atomic writes.'
+    );
+  }
+  logger.warn('MongoDB has no transaction support; multi-document writes are not atomic');
+  return false;
+}
+
+/**
  * @param {(session: import('mongoose').ClientSession|null) => Promise<any>} fn
  * @returns {Promise<any>} whatever `fn` resolves to
  */
 async function withTransaction(fn) {
-  if (supported === null) {
-    supported = await detectTransactionSupport();
-    if (!supported) {
-      logger.warn(
-        'MongoDB deployment does not support transactions — multi-document writes ' +
-          'will run without atomicity. Use a replica set in production.'
-      );
-    }
-  }
-
+  if (supported === null) supported = await detectTransactionSupport();
   if (!supported) return fn(null);
 
   const session = await mongoose.startSession();
   try {
     let result;
-    // `withTransaction` retries the whole callback on transient commit errors,
-    // which is why the callback must stay side-effect-free outside the session.
+    // The driver may retry the callback on transient errors, so keep it free of
+    // side effects outside the session.
     await session.withTransaction(async () => {
       result = await fn(session);
     });
@@ -66,9 +66,14 @@ async function withTransaction(fn) {
   }
 }
 
-/** Test seam — forces the next call to re-probe. */
+/** Test seam: forces the next call to re-probe. */
 function resetTransactionSupport() {
   supported = null;
 }
 
-module.exports = { withTransaction, detectTransactionSupport, resetTransactionSupport };
+module.exports = {
+  withTransaction,
+  detectTransactionSupport,
+  assertTransactionSupport,
+  resetTransactionSupport,
+};

@@ -31,9 +31,10 @@ function denylistKey(jti) {
 }
 
 class TokenService {
-  constructor({ cache = cacheService, config = env } = {}) {
+  constructor({ cache = cacheService, config = env, failClosed = config.isProduction } = {}) {
     this.cache = cache;
     this.config = config;
+    this.failClosed = Boolean(failClosed);
   }
 
   /**
@@ -91,6 +92,24 @@ class TokenService {
   }
 
   /**
+   * Single-use spend of a refresh token (atomic, so concurrent replays lose).
+   * Throws 401 on replay; 503 if the denylist is down and we fail closed.
+   */
+  async consumeRefreshToken(payload) {
+    const ttl = payload.exp - Math.floor(Date.now() / 1000);
+    const claimed = await this.cache.claim(denylistKey(payload.jti), ttl);
+
+    if (claimed === false) {
+      throw ApiError.unauthorized('This session has been revoked', { code: 'TOKEN_REVOKED' });
+    }
+    if (claimed === null && this.failClosed) {
+      throw ApiError.serviceUnavailable('Session service unavailable, please sign in again', {
+        code: 'SESSION_STORE_UNAVAILABLE',
+      });
+    }
+  }
+
+  /**
    * Tokens minted before the user's `tokensValidFrom` watermark are dead.
    *
    * `iat` has second precision, so the comparison floors the watermark to the
@@ -128,4 +147,3 @@ const tokenService = new TokenService();
 
 module.exports = tokenService;
 module.exports.TokenService = TokenService;
-module.exports.TOKEN_TYPE = TOKEN_TYPE;

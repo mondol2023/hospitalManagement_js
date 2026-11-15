@@ -4,6 +4,7 @@ const {
   careLogRepository,
   patientRepository,
   medicineRepository,
+  stockMovementRepository,
 } = require('../repositories');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
@@ -14,6 +15,7 @@ const {
   CLINICAL_ROLES,
   CARE_LOG_TYPE,
   MEDICATION_STATUS,
+  STOCK_MOVEMENT,
   NOTIFICATION_TYPE,
   SOCKET_EVENTS,
 } = require('../utils/constants');
@@ -21,34 +23,13 @@ const nurseService = require('./nurseService');
 const notificationService = require('./notificationService');
 const realtimeService = require('./realtimeService');
 
-/**
- * The bedside record — the feature the original system was missing entirely.
- *
- * "Nurses ... give the track of giving medicine and other services and send the
- * data where only hospital staff, nurses and doctors see the info, and then can
- * do treatment from there" is implemented here:
- *
- *  - **Writing** is restricted to clinicians on the patient's care team, plus any
- *    nurse whose ward covers the patient (`accessPolicy.canWriteCareData`). A
- *    genuine bedside event must not go unrecorded because the roster lagged.
- *  - **Reading** is restricted to clinicians and administrators
- *    (`accessPolicy.canReadCareData`). Note what this excludes: the patient. The
- *    nursing feed is a staff channel by design; the patient's own view is the
- *    discharge summary built from `MedicalRecord`.
- *  - **Acting on it** is the attention queue: out-of-range observations and
- *    non-administered doses are flagged by the model on save and pushed to the
- *    care team immediately, so a deterioration reaches a doctor without anyone
- *    having to open the chart.
- *
- * Entries are never edited or deleted. A correction writes a new entry and
- * supersedes the original, and both stay in the timeline — this is a legal
- * record, and an audit trail that can be rewritten is not one.
- */
+/** The bedside record — the feature the original system was missing entirely. */
 class CareLogService {
   constructor({
     careLogs = careLogRepository,
     patients = patientRepository,
     medicines = medicineRepository,
+    stockMovements = stockMovementRepository,
     nurses = nurseService,
     notifications = notificationService,
     realtime = realtimeService,
@@ -56,6 +37,7 @@ class CareLogService {
     this.careLogs = careLogs;
     this.patients = patients;
     this.medicines = medicines;
+    this.stockMovements = stockMovements;
     this.nurses = nurses;
     this.notifications = notifications;
     this.realtime = realtime;
@@ -64,18 +46,8 @@ class CareLogService {
   // --- Writes ---------------------------------------------------------------
 
   /**
-   * Generic entry point. The typed helpers below build their payload and delegate
-   * here, so authorisation, ward denormalisation, fan-out and flag handling exist
-   * exactly once.
-   *
-   * @param {object} payload
-   * @param {string} payload.patientId
-   * @param {string} payload.type one of CARE_LOG_TYPE
-   * @param {object} actor `req.user`
-   * @param {object} [options]
-   * @param {boolean} [options.skipAccessCheck] for internal callers that have
-   *   already authorised the action (e.g. `bedService` charting an admission)
-   * @param {import('mongoose').ClientSession} [options.session]
+   * Generic entry point. The typed helpers below build their payload and delegate here, so
+   * authorisation, ward denormalisation, fan-out and flag handling exist exactly once.
    */
   async record(payload, actor, { skipAccessCheck = false, session } = {}) {
     const patient = await this._requirePatient(payload.patientId);
@@ -112,16 +84,7 @@ class CareLogService {
     return json;
   }
 
-  /**
-   * Records a dose.
-   *
-   * When the dose is linked to inventory and actually given, stock is decremented
-   * in the same unit of work. `deductStock` is a conditional `$inc` — it refuses
-   * to go below zero — so two nurses drawing the last vial cannot both succeed.
-   * On a deployment without transactions the decrement is compensated by hand if
-   * the chart entry then fails, because silently losing stock is a pharmacy
-   * discrepancy nobody can later explain.
-   */
+  /** Records a dose. */
   async administerMedication(payload, actor) {
     const {
       patientId,
@@ -144,7 +107,8 @@ class CareLogService {
     const deducts = Boolean(medicineId) && status === MEDICATION_STATUS.ADMINISTERED;
     const units = Math.max(1, Number(quantity) || 1);
 
-    return withTransaction(async (session) => {
+    let lowStock = null;
+    const log = await withTransaction(async (session) => {
       let medicine = null;
       if (deducts) {
         medicine = await this.medicines.deductStock(medicineId, units, { session });
@@ -153,6 +117,16 @@ class CareLogService {
             code: 'INSUFFICIENT_STOCK',
           });
         }
+        await this.stockMovements.create(
+          {
+            medicine: medicineId,
+            kind: STOCK_MOVEMENT.ADMINISTERED,
+            delta: -units,
+            onHand: medicine.quantity,
+            actor: accessPolicy.toId(actor.id || actor._id),
+          },
+          { session }
+        );
       }
 
       try {
@@ -177,24 +151,37 @@ class CareLogService {
           { skipAccessCheck: true, session }
         );
 
-        if (medicine && medicine.quantity <= medicine.reorderLevel) {
-          this._warnLowStock(medicine);
-        }
+        if (medicine && medicine.quantity <= medicine.reorderLevel) lowStock = medicine;
         return log;
       } catch (error) {
-        if (deducts && !session) {
-          await this.medicines
-            .restock(medicineId, units)
-            .catch((restockError) =>
-              logger.error('Failed to restore stock after failed administration', {
-                medicineId: String(medicineId),
-                error: restockError.message,
-              })
-            );
-        }
+        if (deducts && !session) await this._restoreStock(medicineId, units, actor);
         throw error;
       }
     });
+
+    // After the commit, so a rolled-back dose never raises an alert.
+    if (lowStock) await this.notifications.alertLowStock(lowStock);
+    return log;
+  }
+
+  // Compensation for a failed chart entry; best effort, and the ledger says it happened.
+  async _restoreStock(medicineId, units, actor) {
+    try {
+      const medicine = await this.medicines.restock(medicineId, units);
+      await this.stockMovements.create({
+        medicine: medicineId,
+        kind: STOCK_MOVEMENT.RESTORED,
+        delta: units,
+        onHand: medicine.quantity,
+        actor: accessPolicy.toId(actor.id || actor._id),
+        reason: 'Care-log entry failed; dose not given',
+      });
+    } catch (error) {
+      logger.error('Failed to restore stock after failed administration', {
+        medicineId: String(medicineId),
+        error: error.message,
+      });
+    }
   }
 
   /** Observations. Out-of-range readings are auto-flagged by the model. */
@@ -306,23 +293,18 @@ class CareLogService {
 
   async getById(careLogId, actor) {
     this._assertCanRead(actor);
-    const log = await this.careLogs.findById(careLogId, {
+    const log = await this.careLogs.findByIdOrThrow(careLogId, 'Care log', {
       populate: [
         { path: 'recordedBy', select: 'name role' },
         { path: 'patient', select: 'medicalRecordNumber ward user' },
       ],
     });
-    if (!log) throw ApiError.notFound('Care log');
     return log;
   }
 
   // --- Acting on flagged entries -------------------------------------------
 
-  /**
-   * Clears a flagged entry. `acknowledgedAt: null` in the filter makes this a
-   * compare-and-set, so the first clinician to respond owns it and a second
-   * acknowledgement does not quietly overwrite the record of who acted.
-   */
+  /** Clears a flagged entry. */
   async acknowledge(careLogId, actor, note) {
     if (!accessPolicy.canReadCareData(actor)) {
       throw ApiError.forbidden('Only clinicians can acknowledge a care entry');
@@ -346,16 +328,9 @@ class CareLogService {
     return updated;
   }
 
-  /**
-   * Corrects an entry by superseding it.
-   *
-   * The original document is never mutated: a chart that can be rewritten after
-   * the fact has no evidential value. The correction is a new entry and the old
-   * one drops out of the live timeline while remaining retrievable.
-   */
+  /** Corrects an entry by superseding it. */
   async correct(careLogId, payload, actor) {
-    const original = await this.careLogs.findById(careLogId);
-    if (!original) throw ApiError.notFound('Care log');
+    const original = await this.careLogs.findByIdOrThrow(careLogId, 'Care log');
     if (original.supersededBy) {
       throw ApiError.conflict('That entry has already been corrected');
     }
@@ -388,10 +363,9 @@ class CareLogService {
 
   /** @private */
   async _requirePatient(patientId) {
-    const patient = await this.patients.findById(patientId, {
+    const patient = await this.patients.findByIdOrThrow(patientId, 'Patient', {
       projection: 'user ward bed primaryDoctor assignedNurses medicalRecordNumber',
     });
-    if (!patient) throw ApiError.notFound('Patient');
     return patient;
   }
 
@@ -419,9 +393,7 @@ class CareLogService {
    * here so the failure is a clear 403 rather than a schema validation error.
    */
   _assertClinicalAuthor(actor) {
-    if (!CLINICAL_ROLES.includes(actor.role)) {
-      throw ApiError.forbidden('Only doctors and nurses can write to a care record');
-    }
+    accessPolicy.assertRole(actor, CLINICAL_ROLES, 'Only doctors and nurses can write to a care record');
   }
 
   /** @private staff-only fan-out: the care room, then the ward's station board. */
@@ -456,15 +428,6 @@ class CareLogService {
     } catch (error) {
       logger.error('Failed to escalate flagged care log', { error: error.message });
     }
-  }
-
-  /** @private */
-  _warnLowStock(medicine) {
-    logger.warn('Medicine at or below reorder level', {
-      medicine: medicine.name,
-      quantity: medicine.quantity,
-      reorderLevel: medicine.reorderLevel,
-    });
   }
 }
 

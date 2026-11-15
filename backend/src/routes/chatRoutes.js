@@ -19,7 +19,7 @@ const controller = require('../controllers/chatController');
  * at the door by `denyPatients` and again by the service.
  *
  * Beyond those three, the router adds no authorisation of its own. Reading a
- * thread is *membership only* — `chatService._requireMember` is the single gate,
+ * thread is *membership only* — `chatGuard.requireMember` is the single gate,
  * and it answers 404 rather than 403 for a non-member so a stranger cannot probe
  * which conversation ids exist. Layering `authorize(...)` on top would only
  * create a second, weaker rule to keep in sync, and would hand administrators a

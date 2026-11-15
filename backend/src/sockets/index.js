@@ -9,33 +9,15 @@ const { createRedisClient } = require('../config/redis');
 const { buildCorsOptions } = require('../middleware/security');
 const { resolveActor } = require('../middleware/authenticate');
 const accessPolicy = require('../utils/accessPolicy');
+const ApiError = require('../utils/ApiError');
 const { SOCKET_ROOMS } = require('../utils/constants');
 const realtimeService = require('../services/realtimeService');
 const RateGuard = require('./rateGuard');
 const { registerChatHandlers } = require('./chatGateway');
 const { registerCareHandlers } = require('./careGateway');
 
-/**
- * The realtime server.
- *
- * Three things make this scale past one box, and all three are the reason this
- * file exists rather than a handful of `io.on` calls in `server.js`:
- *
- *  - **A Redis adapter.** Without it, `io.to(room).emit()` only reaches sockets
- *    connected to *this* process. With four cluster workers that means three out
- *    of four participants miss every message — a bug that never appears in
- *    development, where there is one worker, and appears immediately in
- *    production. With Redis off the adapter is skipped and the app runs
- *    single-instance, which is honest rather than silently broken.
- *  - **Rooms instead of per-socket bookkeeping.** No map of user → socket ids is
- *    maintained here; the adapter already keeps one, shared across the cluster,
- *    and a second copy in process memory would be wrong the moment a worker
- *    restarts.
- *  - **The same authentication as HTTP.** The handshake runs `resolveActor`, the
- *    exact function the `authenticate` middleware uses, so a revoked token or a
- *    deactivated account is refused a socket for the same reasons it is refused a
- *    request.
- */
+// Realtime server. Redis adapter so emits reach every worker; rooms instead of
+// per-socket maps; the handshake runs the same `resolveActor` as HTTP.
 
 /** Rooms a socket is placed in the moment it authenticates. */
 function roomsFor(actor) {
@@ -86,6 +68,7 @@ async function authenticateSocket(socket, next) {
 
     const actor = await resolveActor(token);
     socket.data.user = actor;
+    socket.data.token = token;
     socket.data.rateGuard = new RateGuard();
     return next();
   } catch (cause) {
@@ -96,6 +79,27 @@ async function authenticateSocket(socket, next) {
     };
     return next(error);
   }
+}
+
+const SESSION_RECHECK_MS = 60_000;
+
+// A socket is authenticated once, so re-check on an interval: drop it if the
+// token expired, was revoked, the account was disabled, or the role changed
+// (rooms were chosen from the old role; the client reconnects and gets new ones).
+// Infrastructure errors keep the socket: a database blip must not mass-disconnect.
+function watchSession(socket, { resolve = resolveActor, intervalMs = SESSION_RECHECK_MS } = {}) {
+  const timer = setInterval(async () => {
+    try {
+      const actor = await resolve(socket.data.token);
+      if (actor.role !== socket.data.user.role) socket.disconnect(true);
+    } catch (error) {
+      if (error instanceof ApiError) socket.disconnect(true);
+      else logger.warn('Socket session re-check failed', { error: error.message });
+    }
+  }, intervalMs);
+  timer.unref?.();
+
+  socket.once('disconnect', () => clearInterval(timer));
 }
 
 /**
@@ -148,6 +152,7 @@ function createSocketServer(httpServer) {
 
     logger.debug('Socket connected', { socketId: socket.id, userId: actor.id, role: actor.role });
 
+    watchSession(socket);
     registerChatHandlers(socket);
     registerCareHandlers(socket);
 
@@ -178,6 +183,7 @@ module.exports = {
   createSocketServer,
   closeSocketServer,
   authenticateSocket,
+  watchSession,
   extractHandshakeToken,
   roomsFor,
 };

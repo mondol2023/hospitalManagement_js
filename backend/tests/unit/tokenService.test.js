@@ -271,3 +271,33 @@ describe('tokenService — the logout-everywhere watermark', () => {
     expect(TokenService.isStale({ iat }, new Date('2026-01-02T00:00:00Z'))).toBe(true);
   });
 });
+
+describe('tokenService — consumeRefreshToken', () => {
+  const payload = () => ({ jti: 'jti-1', exp: Math.floor(Date.now() / 1000) + 60 });
+  const withClaim = (result, opts = {}) =>
+    new TokenService({ cache: { claim: jest.fn().mockResolvedValue(result) }, ...opts });
+
+  it('accepts the first spend', async () => {
+    await expect(withClaim(true).consumeRefreshToken(payload())).resolves.toBeUndefined();
+  });
+
+  it('rejects a replay', async () => {
+    await expect(withClaim(false).consumeRefreshToken(payload())).rejects.toMatchObject({
+      statusCode: 401,
+      code: 'TOKEN_REVOKED',
+    });
+  });
+
+  it('fails closed when the store is down and failClosed is on', async () => {
+    const service = withClaim(null, { failClosed: true });
+    await expect(service.consumeRefreshToken(payload())).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'SESSION_STORE_UNAVAILABLE',
+    });
+  });
+
+  it('fails open when the store is down outside production', async () => {
+    const service = withClaim(null, { failClosed: false });
+    await expect(service.consumeRefreshToken(payload())).resolves.toBeUndefined();
+  });
+});

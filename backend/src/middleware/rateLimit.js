@@ -7,35 +7,13 @@ const env = require('../config/env');
 const logger = require('../config/logger');
 const { redisClient, isRedisHealthy } = require('../config/redis');
 const ApiError = require('../utils/ApiError');
+const tokenService = require('../services/tokenService');
 
-/**
- * Request throttling.
- *
- * The original app had none, which at 10k users is not a hardening gap so much
- * as a denial-of-service waiting for its first bored client. Three decisions
- * shape this module:
- *
- *  - **Redis-backed when available.** An in-memory counter is per-process, so
- *    under clustering a "10 attempts" limit silently becomes "10 × workers".
- *    With Redis the window is shared by every worker and every instance; without
- *    it we degrade to memory rather than refusing to boot, because local
- *    development and the test suite should not need infrastructure.
- *  - **Keyed by user when authenticated.** Behind a hospital's NAT every
- *    workstation shares one public IP, so IP-only limiting throttles a whole
- *    ward because one person is impatient. IP is the fallback for anonymous
- *    traffic only.
- *  - **A store outage must not become an outage.** `passOnStoreError` lets
- *    requests through if Redis is unreachable. Losing rate limiting for a few
- *    seconds is a lesser failure than refusing every request in the hospital.
- */
+// Redis-backed when available (shared across workers), memory otherwise.
+// Keyed by verified user where possible so a hospital NAT isn't one bucket.
+// A store outage passes requests through rather than taking the API down.
 
-/**
- * Collapses an IPv6 address to its /64 prefix.
- *
- * A single residential IPv6 allocation is routinely a /64 or larger, so limiting
- * per full address lets one client rotate through billions of "distinct"
- * identities. IPv4 (including IPv4-mapped form) is used as-is.
- */
+// IPv6 collapses to its /64 so one client can't rotate through addresses.
 function normaliseIp(ip) {
   if (!ip) return 'unknown';
 
@@ -56,17 +34,34 @@ function normaliseIp(ip) {
   return `${groups.slice(0, 4).join(':')}::/64`;
 }
 
-/** User id when we have one, otherwise the network the caller is on. */
-function clientKey(req) {
-  if (req.user?.id) return `u:${req.user.id}`;
-  return `ip:${normaliseIp(req.ip)}`;
+const BEARER = /^Bearer[ \t]+(\S+)$/i;
+
+const ipKey = (req) => `ip:${normaliseIp(req.ip)}`;
+
+// Signature check only, no DB read: limiters run before `authenticate`.
+function subOf(verify, token) {
+  if (!token) return null;
+  try {
+    return verify(token).sub || null;
+  } catch {
+    return null;
+  }
 }
 
-/**
- * Each limiter needs its own store instance — express-rate-limit rejects a
- * shared one (ERR_ERL_STORE_REUSE) because two limiters sharing counters would
- * silently halve each other's budget.
- */
+function clientKey(req, tokens = tokenService) {
+  if (req.user?.id) return `u:${req.user.id}`;
+  const match = BEARER.exec(String(req.headers?.authorization || '').trim());
+  const sub = subOf((t) => tokens.verifyAccessToken(t), match?.[1]);
+  return sub ? `u:${sub}` : ipKey(req);
+}
+
+// /auth/refresh has no email, so key by the refresh token's owner.
+function refreshKey(req, tokens = tokenService) {
+  const sub = subOf((t) => tokens.verifyRefreshToken(t), req.body?.refreshToken);
+  return sub ? `u:${sub}` : ipKey(req);
+}
+
+// One store per limiter: express-rate-limit rejects a shared one.
 function buildStore(prefix) {
   if (!redisClient) return undefined;
   return new RedisStore({
@@ -75,13 +70,7 @@ function buildStore(prefix) {
   });
 }
 
-/**
- * Turns a rejection into the API's standard error envelope.
- *
- * `resetTime` comes from the store, so the advertised wait is the real one
- * rather than a guess at the window length; the fallback covers stores that do
- * not report it.
- */
+// Retry-After uses the store's real reset time when it reports one.
 function createLimitHandler(windowMs) {
   return function limitReached(req, res, next) {
     const resetTime = req.rateLimit?.resetTime;
@@ -123,28 +112,17 @@ function createLimiter({
     store: buildStore(name),
     keyGenerator,
     skipSuccessfulRequests,
-    // Requests are allowed through if the store is unreachable; the alternative
-    // is a Redis blip taking the API down.
     passOnStoreError: true,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
-    // Deterministic tests matter more than throttling a suite that runs alone.
     skip: () => env.isTest,
     handler: createLimitHandler(windowMs),
   });
 }
 
-/** Blanket limit for the whole API surface. */
 const globalLimiter = createLimiter({ name: 'global', max: env.RATE_LIMIT_MAX });
 
-/**
- * Credential endpoints.
- *
- * Keyed by network *and* submitted email, so neither "one host guessing many
- * accounts" nor "many hosts guessing one account" slips through a limit that
- * only looks at one of them. `skipSuccessfulRequests` means a busy shift-change
- * of legitimate logins never eats into the budget that exists to stop guessing.
- */
+// Credential endpoints: IP + email, failures only, so shift-change logins are free.
 const authLimiter = createLimiter({
   name: 'auth',
   max: env.AUTH_RATE_LIMIT_MAX,
@@ -155,24 +133,28 @@ const authLimiter = createLimiter({
   },
 });
 
-/**
- * Expensive read endpoints (reports, exports, aggregations).
- *
- * A short window on purpose: these are legitimate but heavy, so the goal is to
- * smooth bursts, not to ration the working day.
- */
+// Refresh failures only, keyed per token owner (see refreshKey).
+const refreshLimiter = createLimiter({
+  name: 'refresh',
+  max: env.AUTH_RATE_LIMIT_MAX,
+  skipSuccessfulRequests: true,
+  keyGenerator: refreshKey,
+});
+
+// Heavy reads: short window to smooth bursts.
 const reportLimiter = createLimiter({ name: 'report', max: 30, windowMs: 60 * 1000 });
 
-/** Uploads: few per minute is plenty, and each one costs bandwidth and storage. */
 const uploadLimiter = createLimiter({ name: 'upload', max: 20, windowMs: 60 * 1000 });
 
 module.exports = {
   createLimiter,
   globalLimiter,
   authLimiter,
+  refreshLimiter,
   reportLimiter,
   uploadLimiter,
   clientKey,
+  refreshKey,
   normaliseIp,
   isRedisHealthy,
 };

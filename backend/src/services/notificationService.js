@@ -6,6 +6,7 @@ const ApiError = require('../utils/ApiError');
 const realtimeService = require('./realtimeService');
 const { emailProvider, smsProvider } = require('./providers');
 const {
+  INVENTORY_ROLES,
   NOTIFICATION_CHANNEL,
   NOTIFICATION_TYPE,
   SOCKET_EVENTS,
@@ -88,6 +89,52 @@ class NotificationService {
     this._dispatchExternal(unique, json);
 
     return docs;
+  }
+
+  // `channels` omitted means in-app only.
+  notifyAppointment(appointmentId, recipients, { title, message, channels }) {
+    return this.notifyMany(recipients, {
+      title,
+      message,
+      type: NOTIFICATION_TYPE.APPOINTMENT,
+      channels,
+      data: { appointmentId: String(appointmentId) },
+    });
+  }
+
+  // Everyone who may change stock is told when it runs low, admins included.
+  inventoryRecipientUsers() {
+    return this.users.find(
+      { role: { $in: INVENTORY_ROLES }, isActive: true },
+      { projection: 'name role', lean: true, limit: 50 }
+    );
+  }
+
+  async inventoryRecipients() {
+    const users = await this.inventoryRecipientUsers();
+    return users.map((user) => user._id);
+  }
+
+  // Best-effort: a missed alert must not fail the dispense that caused it.
+  alertLowStock(medicine) {
+    logger.warn('Medicine at or below reorder level', {
+      medicine: medicine.name,
+      batchNumber: medicine.batchNumber,
+      quantity: medicine.quantity,
+      reorderLevel: medicine.reorderLevel,
+    });
+
+    return this.inventoryRecipients()
+      .then((recipients) => {
+        if (!recipients.length) return null;
+        return this.notifyMany(recipients, {
+          title: 'Low stock',
+          message: `${medicine.name} (batch ${medicine.batchNumber}) is down to ${medicine.quantity} units, reorder level ${medicine.reorderLevel}.`,
+          type: NOTIFICATION_TYPE.INVENTORY,
+          data: { medicineId: String(medicine._id) },
+        });
+      })
+      .catch((error) => logger.error('Low-stock alert failed', { error: error.message }));
   }
 
   list(userId, query = {}) {

@@ -1,87 +1,47 @@
 'use strict';
 
-const asyncHandler = require('../utils/asyncHandler');
-const { sendSuccess, sendCreated, sendPage } = require('../utils/apiResponse');
+const handle = require('../utils/handle');
 const billingService = require('../services/billingService');
 
-const list = asyncHandler(async (req, res) => {
-  const page = await billingService.list(req.query, req.user);
-  return sendPage(res, page);
-});
+const list = handle.page((req) => billingService.list(req.query, req.user));
 
 /**
  * `req.patient` comes from `loadPatient`, which resolves the `me` alias — a
  * patient asking for their own invoices does not know their patient id.
  */
-const listForPatient = asyncHandler(async (req, res) => {
-  const page = await billingService.listForPatient(req.patient._id, req.user, req.query);
-  return sendPage(res, page);
-});
+const listForPatient = handle.page((req) =>
+  billingService.listForPatient(req.patient._id, req.user, req.query)
+);
 
-const outstanding = asyncHandler(async (req, res) => {
-  const page = await billingService.outstanding(req.query, req.user);
-  return sendPage(res, page);
-});
+const outstanding = handle.page((req) => billingService.outstanding(req.query, req.user));
 
-const revenue = asyncHandler(async (req, res) => {
-  const data = await billingService.revenue(req.query, req.user);
-  return sendSuccess(res, { data });
-});
+const revenue = handle((req) => billingService.revenue(req.query, req.user));
 
-const paymentMethods = asyncHandler(async (req, res) => {
-  const data = await billingService.paymentMethods();
-  return sendSuccess(res, { data });
-});
+const paymentMethods = handle(() => billingService.paymentMethods());
 
-const getById = asyncHandler(async (req, res) => {
-  const bill = await billingService.getById(req.params.id, req.user);
-  return sendSuccess(res, { data: bill });
-});
+const getById = handle((req) => billingService.getById(req.params.id, req.user));
 
-const getByInvoiceNumber = asyncHandler(async (req, res) => {
-  const bill = await billingService.getByInvoiceNumber(req.params.invoiceNumber, req.user);
-  return sendSuccess(res, { data: bill });
-});
+const getByInvoiceNumber = handle((req) =>
+  billingService.getByInvoiceNumber(req.params.invoiceNumber, req.user)
+);
 
-const create = asyncHandler(async (req, res) => {
-  const bill = await billingService.create(req.body, req.user);
-  return sendCreated(res, bill);
-});
+const create = handle.created((req) => billingService.create(req.body, req.user));
 
-const buildFromCare = asyncHandler(async (req, res) => {
-  const bill = await billingService.buildFromCare(req.params.patientId, req.user, req.body);
-  return sendCreated(res, bill);
-});
+const buildFromCare = handle.created((req) =>
+  billingService.buildFromCare(req.params.patientId, req.user, req.body)
+);
 
-const addItems = asyncHandler(async (req, res) => {
-  const bill = await billingService.addItems(req.params.id, req.body.items, req.user);
-  return sendSuccess(res, { data: bill });
-});
+const addItems = handle((req) => billingService.addItems(req.params.id, req.body.items, req.user));
 
-const update = asyncHandler(async (req, res) => {
-  const bill = await billingService.update(req.params.id, req.body, req.user);
-  return sendSuccess(res, { data: bill });
-});
+const update = handle((req) => billingService.update(req.params.id, req.body, req.user));
 
-const issue = asyncHandler(async (req, res) => {
-  const bill = await billingService.issue(req.params.id, req.user);
-  return sendSuccess(res, { data: bill });
-});
+const issue = handle((req) => billingService.issue(req.params.id, req.user));
 
-const voidBill = asyncHandler(async (req, res) => {
-  const bill = await billingService.voidBill(req.params.id, req.body.reason, req.user);
-  return sendSuccess(res, { data: bill });
-});
+const voidBill = handle((req) => billingService.voidBill(req.params.id, req.body.reason, req.user));
 
-const pay = asyncHandler(async (req, res) => {
-  const bill = await billingService.pay(req.params.id, req.body, req.user);
-  return sendSuccess(res, { data: bill });
-});
+const pay = handle((req) => billingService.pay(req.params.id, req.body, req.user));
 
-const refund = asyncHandler(async (req, res) => {
-  const bill = await billingService.refund(req.params.id, req.body, req.user);
-  return sendSuccess(res, { data: bill });
-});
+const refund = handle((req) => billingService.refund(req.params.id, req.body, req.user));
 
 module.exports = {
   list,

@@ -1,58 +1,36 @@
 'use strict';
 
 const asyncHandler = require('../utils/asyncHandler');
-const { sendSuccess, sendCreated, sendPage } = require('../utils/apiResponse');
+const handle = require('../utils/handle');
+const { sendSuccess } = require('../utils/apiResponse');
 const emergencyService = require('../services/emergencyService');
 
-const raise = asyncHandler(async (req, res) => {
-  const alert = await emergencyService.raise(req.body, req.user);
-  return sendCreated(res, alert);
-});
+const raise = handle.created((req) => emergencyService.raise(req.body, req.user));
 
-const activeBoard = asyncHandler(async (req, res) => {
-  const page = await emergencyService.activeBoard(req.query, req.user);
-  return sendPage(res, page);
-});
+const activeBoard = handle.page((req) => emergencyService.activeBoard(req.query, req.user));
 
-const list = asyncHandler(async (req, res) => {
-  const page = await emergencyService.list(req.query, req.user);
-  return sendPage(res, page);
-});
+const list = handle.page((req) => emergencyService.list(req.query, req.user));
 
-const listForPatient = asyncHandler(async (req, res) => {
-  const page = await emergencyService.listForPatient(req.params.patientId, req.user, req.query);
-  return sendPage(res, page);
-});
+const listForPatient = handle.page((req) =>
+  emergencyService.listForPatient(req.params.patientId, req.user, req.query)
+);
 
 const countOpen = asyncHandler(async (req, res) => {
   const count = await emergencyService.countOpen(req.user);
   return sendSuccess(res, { data: { count } });
 });
 
-const responseStats = asyncHandler(async (req, res) => {
-  const data = await emergencyService.responseStats(req.query, req.user);
-  return sendSuccess(res, { data });
-});
+const responseStats = handle((req) => emergencyService.responseStats(req.query, req.user));
 
-const getById = asyncHandler(async (req, res) => {
-  const alert = await emergencyService.getById(req.params.id, req.user);
-  return sendSuccess(res, { data: alert });
-});
+const getById = handle((req) => emergencyService.getById(req.params.id, req.user));
 
-const acknowledge = asyncHandler(async (req, res) => {
-  const alert = await emergencyService.acknowledge(req.params.id, req.user);
-  return sendSuccess(res, { data: alert });
-});
+const acknowledge = handle((req) => emergencyService.acknowledge(req.params.id, req.user));
 
-const resolve = asyncHandler(async (req, res) => {
-  const alert = await emergencyService.resolve(req.params.id, req.body, req.user);
-  return sendSuccess(res, { data: alert });
-});
+const resolve = handle((req) => emergencyService.resolve(req.params.id, req.body, req.user));
 
-const escalate = asyncHandler(async (req, res) => {
-  const alert = await emergencyService.escalate(req.params.id, req.body.severity, req.user);
-  return sendSuccess(res, { data: alert });
-});
+const escalate = handle((req) =>
+  emergencyService.escalate(req.params.id, req.body.severity, req.user)
+);
 
 module.exports = {
   raise,

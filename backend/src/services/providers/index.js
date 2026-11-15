@@ -17,4 +17,5 @@ module.exports = {
   ...require('./paymentProviderRegistry'),
   emailProvider: require('./emailProvider'),
   smsProvider: require('./smsProvider'),
+  storageProvider: require('./storageProvider'),
 };

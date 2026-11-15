@@ -1,42 +1,22 @@
 'use strict';
 
-const asyncHandler = require('../utils/asyncHandler');
-const { sendSuccess, sendCreated, sendPage } = require('../utils/apiResponse');
+const handle = require('../utils/handle');
 const userService = require('../services/userService');
 
-const create = asyncHandler(async (req, res) => {
-  const user = await userService.createAccount(req.body);
-  return sendCreated(res, user);
-});
+const create = handle.created((req) => userService.createAccount(req.body));
 
-const list = asyncHandler(async (req, res) => {
-  const page = await userService.list(req.query);
-  return sendPage(res, page);
-});
+const list = handle.page((req) => userService.list(req.query));
 
-const getById = asyncHandler(async (req, res) => {
-  const user = await userService.getById(req.params.id);
-  return sendSuccess(res, { data: user });
-});
+const getById = handle((req) => userService.getById(req.params.id));
 
-const update = asyncHandler(async (req, res) => {
-  const user = await userService.update(req.params.id, req.body);
-  return sendSuccess(res, { data: user });
-});
+const update = handle((req) => userService.update(req.params.id, req.body));
 
-const changeRole = asyncHandler(async (req, res) => {
-  const user = await userService.changeRole(req.params.id, req.body.role, req.body.profile);
-  return sendSuccess(res, { data: user });
-});
+const changeRole = handle((req) =>
+  userService.changeRole(req.params.id, req.body.role, req.body.profile)
+);
 
-const setActive = asyncHandler(async (req, res) => {
-  const user = await userService.setActive(req.params.id, req.body.isActive);
-  return sendSuccess(res, { data: user });
-});
+const setActive = handle((req) => userService.setActive(req.params.id, req.body.isActive));
 
-const statistics = asyncHandler(async (req, res) => {
-  const stats = await userService.statistics();
-  return sendSuccess(res, { data: stats });
-});
+const statistics = handle(() => userService.statistics());
 
 module.exports = { create, list, getById, update, changeRole, setActive, statistics };

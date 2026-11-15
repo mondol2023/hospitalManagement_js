@@ -10,47 +10,29 @@ const ApiError = require('../utils/ApiError');
 const accessPolicy = require('../utils/accessPolicy');
 const { ROLES, NOTIFICATION_TYPE } = require('../utils/constants');
 const notificationService = require('./notificationService');
+const storageProvider = require('./providers/storageProvider');
 
-/**
- * The clinical encounter record — diagnosis, treatment plan, prescriptions.
- *
- * The model existed in the original codebase with no service, no controller and
- * no route: declared, indexed, and unreachable. This is the layer that makes it
- * a feature.
- *
- * Visibility differs from the nursing feed on purpose. `CareLog` is a staff
- * channel — a patient never reads their own observation stream, because raw
- * flagged vitals without a clinician's interpretation are alarming and useless.
- * The encounter record is the opposite: it is the document written *for* the
- * patient as much as for the chart, so they can read their own, and only their
- * own. Everyone else needs the clinical read tier; being an employee is not
- * enough, because a receptionist has no business reading a diagnosis.
- *
- * Authorship is a doctor. Not "a clinician" — a nurse's contribution to the
- * record is the care log, and the two must not blur, since the encounter record
- * is what discharge summaries and insurance claims are built from.
- */
+const MAX_ATTACHMENTS = 20;
+
+/** The clinical encounter record — diagnosis, treatment plan, prescriptions. */
 class MedicalRecordService {
   constructor({
     records = medicalRecordRepository,
     patients = patientRepository,
     medicines = medicineRepository,
     notifications = notificationService,
+    storage = storageProvider,
   } = {}) {
     this.records = records;
     this.patients = patients;
     this.medicines = medicines;
     this.notifications = notifications;
+    this.storage = storage;
   }
 
   // --- Reads ----------------------------------------------------------------
 
-  /**
-   * A patient's chart, most recent visit first.
-   *
-   * The patient themselves is allowed through; every other reader must clear the
-   * clinical tier.
-   */
+  /** A patient's chart, most recent visit first. */
   async chart(patientId, actor, query = {}) {
     const patient = await this._requirePatient(patientId);
     this._assertCanRead(patient, actor);
@@ -72,13 +54,12 @@ class MedicalRecordService {
   }
 
   async getById(recordId, actor) {
-    const record = await this.records.findById(recordId, {
+    const record = await this.records.findByIdOrThrow(recordId, 'Medical record', {
       populate: [
         { path: 'doctor', select: 'name email' },
         { path: 'patient', select: 'medicalRecordNumber ward user' },
       ],
     });
-    if (!record) throw ApiError.notFound('Medical record');
 
     this._assertCanRead(record.patient, actor);
     return record;
@@ -93,15 +74,7 @@ class MedicalRecordService {
 
   // --- Writes ---------------------------------------------------------------
 
-  /**
-   * Records an encounter.
-   *
-   * Prescriptions are structured rather than a free-text blob — the original
-   * schema had them as one string, which meant the pharmacy module could never
-   * act on them. Where a line item is linked to inventory the medicine's real
-   * name is copied in, so the record still reads correctly if the catalogue entry
-   * is later renamed or retired.
-   */
+  /** Records an encounter. */
   async create(payload = {}, actor) {
     this._assertDoctor(actor);
     const patient = await this._requirePatient(payload.patientId);
@@ -137,22 +110,9 @@ class MedicalRecordService {
     return record.toJSON();
   }
 
-  /**
-   * Amends an encounter.
-   *
-   * The authoring doctor only — not their colleagues, not an administrator. A
-   * record is a signed clinical opinion, and letting a third party edit it while
-   * the signature stays the same is how charts stop being evidence.
-   *
-   * `patient` and `doctor` are absent from the whitelist: moving a record to a
-   * different patient is never a correction, it is a new record.
-   */
+  /** Amends an encounter. */
   async update(recordId, patch = {}, actor) {
-    const record = await this.records.findById(recordId, { projection: 'doctor patient' });
-    if (!record) throw ApiError.notFound('Medical record');
-    if (String(record.doctor) !== String(actor.id || actor._id)) {
-      throw ApiError.forbidden('Only the authoring doctor can amend this record');
-    }
+    await this._requireAuthor(recordId, actor);
 
     const allowed = [
       'chiefComplaint',
@@ -177,6 +137,33 @@ class MedicalRecordService {
     return updated;
   }
 
+  /** Uploads scans/PDFs and appends them; the authoring doctor only, like `update`. */
+  async addAttachments(recordId, files = [], actor) {
+    const record = await this._requireAuthor(recordId, actor, 'attachments');
+    if (!files.length) throw ApiError.badRequest('At least one file is required');
+    if ((record.attachments?.length || 0) + files.length > MAX_ATTACHMENTS) {
+      throw ApiError.conflict(`A record holds at most ${MAX_ATTACHMENTS} attachments`, {
+        code: 'TOO_MANY_ATTACHMENTS',
+      });
+    }
+
+    const stored = await Promise.all(
+      files.map((file) => this.storage.upload(file, { folder: 'medical-records' }))
+    );
+    return this.records.updateById(recordId, { $push: { attachments: { $each: stored } } });
+  }
+
+  /** @private */
+  async _requireAuthor(recordId, actor, projection = '') {
+    const record = await this.records.findByIdOrThrow(recordId, 'Medical record', {
+      projection: `doctor patient ${projection}`.trim(),
+    });
+    if (String(record.doctor) !== String(actor.id || actor._id)) {
+      throw ApiError.forbidden('Only the authoring doctor can amend this record');
+    }
+    return record;
+  }
+
   /**
    * Deletion is administrative only and exists for genuine mistakes — a record
    * filed against the wrong patient. Clinical corrections go through `update`.
@@ -196,25 +183,14 @@ class MedicalRecordService {
 
   // --- Follow-ups -----------------------------------------------------------
 
-  /**
-   * Follow-ups falling due in the next `days`.
-   *
-   * Returned rather than acted on, so the caller — a scheduled sweep — decides
-   * what to do with them. Keeping the query and the reminder separate is what
-   * makes this testable without a clock.
-   */
+  /** Follow-ups falling due in the next `days`. */
   followUpsDue({ days = 1 } = {}) {
     const from = new Date();
     const to = new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
     return this.records.followUpsDue(from, to);
   }
 
-  /**
-   * Reminds patients whose follow-up falls in the window.
-   *
-   * Best-effort per patient: one bad recipient must not stop the rest of the
-   * sweep, so failures are logged and counted rather than thrown.
-   */
+  /** Reminds patients whose follow-up falls in the window. */
   async sendFollowUpReminders({ days = 1 } = {}) {
     const due = await this.followUpsDue({ days });
     let sent = 0;
@@ -252,10 +228,9 @@ class MedicalRecordService {
 
   /** @private */
   async _requirePatient(patientId) {
-    const patient = await this.patients.findById(patientId, {
+    const patient = await this.patients.findByIdOrThrow(patientId, 'Patient', {
       projection: 'user ward primaryDoctor assignedNurses medicalRecordNumber',
     });
-    if (!patient) throw ApiError.notFound('Patient');
     return patient;
   }
 

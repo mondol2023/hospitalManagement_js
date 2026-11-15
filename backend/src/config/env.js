@@ -50,6 +50,8 @@ const envSchema = z
     MONGO_MIN_POOL_SIZE: int(5, { min: 0 }),
     MONGO_SERVER_SELECTION_TIMEOUT_MS: int(10000, { min: 1000 }),
     MONGO_SOCKET_TIMEOUT_MS: int(45000, { min: 1000 }),
+    // Production refuses to boot on a standalone MongoDB unless this is false.
+    MONGO_REQUIRE_TRANSACTIONS: bool(true),
 
     // --- Cache / pub-sub ---------------------------------------------------
     // Optional: the app degrades gracefully to in-process behaviour without it.
@@ -135,6 +137,7 @@ function loadEnv(source = process.env) {
     isProduction: cfg.NODE_ENV === 'production',
     isTest: cfg.NODE_ENV === 'test',
     isDevelopment: cfg.NODE_ENV === 'development',
+    requireTransactions: cfg.NODE_ENV === 'production' && cfg.MONGO_REQUIRE_TRANSACTIONS,
     // Redis is only truly on when enabled *and* a URL was supplied.
     redisEnabled: cfg.REDIS_ENABLED && Boolean(cfg.REDIS_URL),
   };

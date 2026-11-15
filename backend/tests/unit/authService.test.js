@@ -7,6 +7,7 @@ jest.mock('../../src/utils/transaction', () => ({
 const { withTransaction } = require('../../src/utils/transaction');
 const { AuthService } = require('../../src/services/authService');
 const ApiError = require('../../src/utils/ApiError');
+const BaseRepository = require('../../src/repositories/BaseRepository');
 const { ROLES } = require('../../src/utils/constants');
 
 /**
@@ -66,6 +67,7 @@ const fakeUsers = () => ({
   findByIdWithPassword: jest.fn(),
   findActiveById: jest.fn(),
   findById: jest.fn(),
+  findByIdOrThrow: BaseRepository.prototype.findByIdOrThrow,
   touchLogin: jest.fn().mockResolvedValue(undefined),
   revokeTokens: jest.fn().mockResolvedValue(undefined),
 });
@@ -83,7 +85,7 @@ const fakeTokens = () => ({
     type: 'refresh',
     iat: nowSeconds(),
   })),
-  isRefreshRevoked: jest.fn().mockResolvedValue(false),
+  consumeRefreshToken: jest.fn().mockResolvedValue(undefined),
   revokeRefreshToken: jest.fn().mockResolvedValue(true),
 });
 
@@ -293,10 +295,10 @@ describe('refresh', () => {
 
     const result = await service.refresh('refresh-token');
 
-    expect(tokens.revokeRefreshToken).toHaveBeenCalledWith(
+    expect(tokens.consumeRefreshToken).toHaveBeenCalledWith(
       expect.objectContaining({ jti: 'jti-1' })
     );
-    expect(tokens.revokeRefreshToken.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(tokens.consumeRefreshToken.mock.invocationCallOrder[0]).toBeLessThan(
       tokens.issueTokens.mock.invocationCallOrder[0]
     );
     expect(result.refreshToken).toBe('refresh-1');
@@ -326,13 +328,15 @@ describe('refresh', () => {
   });
 
   it('rejects a replayed token that rotation already burned', async () => {
-    tokens.isRefreshRevoked.mockResolvedValue(true);
+    users.findActiveById.mockResolvedValue({ _id: 'user-1', role: ROLES.PATIENT });
+    tokens.consumeRefreshToken.mockRejectedValue(
+      ApiError.unauthorized('revoked', { code: 'TOKEN_REVOKED' })
+    );
 
     await expectApiError(service.refresh('refresh-token'), {
       status: 401,
       code: 'TOKEN_REVOKED',
     });
-    expect(users.findActiveById).not.toHaveBeenCalled();
     expect(tokens.issueTokens).not.toHaveBeenCalled();
   });
 
@@ -376,7 +380,7 @@ describe('refresh', () => {
     });
 
     await expectApiError(service.refresh('expired'), { status: 401, code: 'TOKEN_EXPIRED' });
-    expect(tokens.revokeRefreshToken).not.toHaveBeenCalled();
+    expect(tokens.consumeRefreshToken).not.toHaveBeenCalled();
   });
 });
 
@@ -384,6 +388,11 @@ describe('logout', () => {
   it('burns the presented token', async () => {
     await expect(service.logout('refresh-token')).resolves.toEqual({ revoked: true });
     expect(tokens.revokeRefreshToken).toHaveBeenCalled();
+  });
+
+  it('reports revoked: false when the denylist could not record it', async () => {
+    tokens.revokeRefreshToken.mockResolvedValue(false);
+    await expect(service.logout('refresh-token')).resolves.toEqual({ revoked: false });
   });
 
   it('treats a missing token as an accomplished logout', async () => {

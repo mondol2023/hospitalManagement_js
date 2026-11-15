@@ -1,67 +1,43 @@
 'use strict';
 
-const asyncHandler = require('../utils/asyncHandler');
-const { sendSuccess, sendCreated, sendPage } = require('../utils/apiResponse');
+const handle = require('../utils/handle');
 const appointmentService = require('../services/appointmentService');
 
-const book = asyncHandler(async (req, res) => {
-  const appointment = await appointmentService.book(req.body, req.user);
-  return sendCreated(res, appointment);
-});
+const book = handle.created((req) => appointmentService.book(req.body, req.user));
 
-const listMine = asyncHandler(async (req, res) => {
-  const page = await appointmentService.listMine(req.user, req.query);
-  return sendPage(res, page);
-});
+const listMine = handle.page((req) => appointmentService.listMine(req.user, req.query));
 
-const listForPatient = asyncHandler(async (req, res) => {
-  const page = await appointmentService.listForPatient(
+const listForPatient = handle.page((req) =>
+  appointmentService.listForPatient(
     req.params.patientId,
     req.user,
     req.query
-  );
-  return sendPage(res, page);
-});
+  )
+);
 
-const listForDoctor = asyncHandler(async (req, res) => {
-  const page = await appointmentService.listForDoctor(req.params.userId, req.query);
-  return sendPage(res, page);
-});
+const listForDoctor = handle.page((req) =>
+  appointmentService.listForDoctor(req.params.userId, req.query)
+);
 
-const daySchedule = asyncHandler(async (req, res) => {
-  const data = await appointmentService.daySchedule(req.params.userId, req.query.date);
-  return sendSuccess(res, { data });
-});
+const daySchedule = handle((req) =>
+  appointmentService.daySchedule(req.params.userId, req.query.date)
+);
 
-const getById = asyncHandler(async (req, res) => {
-  const appointment = await appointmentService.getById(req.params.id, req.user);
-  return sendSuccess(res, { data: appointment });
-});
+const getById = handle((req) => appointmentService.getById(req.params.id, req.user));
 
-const reschedule = asyncHandler(async (req, res) => {
-  const appointment = await appointmentService.reschedule(req.params.id, req.body, req.user);
-  return sendSuccess(res, { data: appointment });
-});
+const reschedule = handle((req) =>
+  appointmentService.reschedule(req.params.id, req.body, req.user)
+);
 
-const confirm = asyncHandler(async (req, res) => {
-  const appointment = await appointmentService.confirm(req.params.id, req.user);
-  return sendSuccess(res, { data: appointment });
-});
+const confirm = handle((req) => appointmentService.confirm(req.params.id, req.user));
 
-const cancel = asyncHandler(async (req, res) => {
-  const appointment = await appointmentService.cancel(req.params.id, req.user, req.body.reason);
-  return sendSuccess(res, { data: appointment });
-});
+const cancel = handle((req) => appointmentService.cancel(req.params.id, req.user, req.body.reason));
 
-const complete = asyncHandler(async (req, res) => {
-  const appointment = await appointmentService.complete(req.params.id, req.user, req.body.notes);
-  return sendSuccess(res, { data: appointment });
-});
+const complete = handle((req) =>
+  appointmentService.complete(req.params.id, req.user, req.body.notes)
+);
 
-const markNoShow = asyncHandler(async (req, res) => {
-  const appointment = await appointmentService.markNoShow(req.params.id, req.user);
-  return sendSuccess(res, { data: appointment });
-});
+const markNoShow = handle((req) => appointmentService.markNoShow(req.params.id, req.user));
 
 module.exports = {
   book,

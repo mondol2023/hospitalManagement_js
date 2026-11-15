@@ -31,7 +31,8 @@ function fakeRedis() {
     status: 'ready',
     store,
     get: jest.fn(async (key) => (store.has(key) ? store.get(key) : null)),
-    set: jest.fn(async (key, value) => {
+    set: jest.fn(async (key, value, ...flags) => {
+      if (flags.includes('NX') && store.has(key)) return null;
       if (!store.has(key)) seen.push(key);
       store.set(key, value);
       return 'OK';
@@ -111,6 +112,7 @@ describe('CacheService — when Redis is switched off', () => {
     await expect(off.increment('k', 60)).resolves.toBeNull();
     await expect(off.has('k')).resolves.toBe(false);
     await expect(off.mark('k', 60)).resolves.toBe(false);
+    await expect(off.claim('k', 60)).resolves.toBeNull();
   });
 
   it('still serves reads through `wrap`, just from the source', async () => {
@@ -325,5 +327,19 @@ describe('CacheService — when Redis fails mid-request', () => {
     const client = fakeRedis();
     client.store.set('k', '{"truncated":');
     await expect(new CacheService(client).get('k')).resolves.toBeNull();
+  });
+});
+
+describe('CacheService — claim', () => {
+  it('lets exactly one caller claim a key', async () => {
+    const cache = new CacheService(fakeRedis());
+    await expect(cache.claim('k', 60)).resolves.toBe(true);
+    await expect(cache.claim('k', 60)).resolves.toBe(false);
+  });
+
+  it('reports null (unknown) when the client errors', async () => {
+    const client = fakeRedis();
+    client.set.mockRejectedValue(new Error('down'));
+    await expect(new CacheService(client).claim('k', 60)).resolves.toBeNull();
   });
 });

@@ -23,11 +23,14 @@ const router = express.Router();
 router.use(authenticate, requireStaff);
 
 const inventory = authorize(ROLES.PHARMACIST, ROLES.ADMIN, ROLES.MANAGER);
+const admins = authorize(ROLES.ADMIN, ROLES.MANAGER);
 
 // Fixed segments before `/:id`.
 router.get('/low-stock', inventory, controller.lowStock);
 router.get('/expiring', inventory, validate(schemas.expiring), controller.expiring);
 router.get('/expired', inventory, controller.expired);
+router.get('/stock-movements', admins, validate(schemas.movements), controller.movements);
+router.get('/stock-report', admins, validate(schemas.stockReport), controller.stockReport);
 router.post('/withdraw-expired', inventory, controller.withdrawExpired);
 
 router.get('/', validate(schemas.list), controller.list);

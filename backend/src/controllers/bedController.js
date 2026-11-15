@@ -1,74 +1,41 @@
 'use strict';
 
-const asyncHandler = require('../utils/asyncHandler');
-const { sendSuccess, sendCreated, sendPage } = require('../utils/apiResponse');
+const handle = require('../utils/handle');
 const bedService = require('../services/bedService');
 
-const list = asyncHandler(async (req, res) => {
-  const page = await bedService.list(req.query);
-  return sendPage(res, page);
-});
+const list = handle.page((req) => bedService.list(req.query));
 
-const available = asyncHandler(async (req, res) => {
-  const data = await bedService.available(req.query);
-  return sendSuccess(res, { data });
-});
+const available = handle((req) => bedService.available(req.query));
 
-const occupancy = asyncHandler(async (req, res) => {
-  const data = await bedService.occupancy();
-  return sendSuccess(res, { data });
-});
+const occupancy = handle(() => bedService.occupancy());
 
-const wards = asyncHandler(async (req, res) => {
-  const data = await bedService.wards();
-  return sendSuccess(res, { data });
-});
+const wards = handle(() => bedService.wards());
 
-const getById = asyncHandler(async (req, res) => {
-  const bed = await bedService.getById(req.params.id);
-  return sendSuccess(res, { data: bed });
-});
+const getById = handle((req) => bedService.getById(req.params.id));
 
-const create = asyncHandler(async (req, res) => {
-  const bed = await bedService.create(req.body);
-  return sendCreated(res, bed);
-});
+const create = handle.created((req) => bedService.create(req.body));
 
-const update = asyncHandler(async (req, res) => {
-  const bed = await bedService.update(req.params.id, req.body);
-  return sendSuccess(res, { data: bed });
-});
+const update = handle((req) => bedService.update(req.params.id, req.body));
 
-const setStatus = asyncHandler(async (req, res) => {
-  const bed = await bedService.setStatus(req.params.id, req.body.status);
-  return sendSuccess(res, { data: bed });
-});
+const setStatus = handle((req) => bedService.setStatus(req.params.id, req.body.status));
 
-const assign = asyncHandler(async (req, res) => {
-  const bed = await bedService.assign(
+const assign = handle((req) =>
+  bedService.assign(
     { bedId: req.params.id, patientId: req.body.patientId },
     req.user
-  );
-  return sendSuccess(res, { data: bed });
-});
+  )
+);
 
-const transfer = asyncHandler(async (req, res) => {
-  const bed = await bedService.transfer(
+const transfer = handle((req) =>
+  bedService.transfer(
     { toBedId: req.params.id, patientId: req.body.patientId },
     req.user
-  );
-  return sendSuccess(res, { data: bed });
-});
+  )
+);
 
-const release = asyncHandler(async (req, res) => {
-  const bed = await bedService.release(req.body.patientId, req.user);
-  return sendSuccess(res, { data: bed });
-});
+const release = handle((req) => bedService.release(req.body.patientId, req.user));
 
-const remove = asyncHandler(async (req, res) => {
-  const data = await bedService.remove(req.params.id);
-  return sendSuccess(res, { data });
-});
+const remove = handle((req) => bedService.remove(req.params.id));
 
 module.exports = {
   list,

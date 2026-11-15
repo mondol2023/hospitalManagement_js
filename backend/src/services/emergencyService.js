@@ -23,27 +23,7 @@ const PAGING_SEVERITIES = Object.freeze([EMERGENCY_SEVERITY.HIGH, EMERGENCY_SEVE
 /** A hard ceiling on the fan-out, so a fire alert cannot become a mail storm. */
 const MAX_RESPONDERS = 200;
 
-/**
- * The alert channel.
- *
- * Two things make this service different from every other one in the codebase.
- *
- * **Latency is the feature.** The socket broadcast goes out before anything else
- * that can be deferred, because the difference between a crash call reaching the
- * ward screen in 50ms and in 2s is the whole point of the collection. Email and
- * SMS fan-out is detached — it is slow, it can fail, and nobody should wait on it.
- *
- * **Anyone may raise one.** `raise` does not check a role. A patient hitting the
- * call button, a visitor, a porter — all of them can report, because a system
- * that refuses an alert from the wrong account is worse than one that occasionally
- * receives a false alarm. Everything *after* the report is staff-only: only
- * employees see the board, acknowledge, or resolve.
- *
- * Acknowledgement is first-responder-wins, decided by a compare-and-set in the
- * database (`acknowledge` guards on `acknowledgedAt: null`). Two nurses hitting
- * "I've got this" simultaneously must not both believe they own the call, and a
- * read-then-write would let the second silently overwrite the first.
- */
+/** The alert channel. */
 class EmergencyService {
   constructor({
     emergencies = emergencyRepository,
@@ -90,7 +70,7 @@ class EmergencyService {
 
   async getById(emergencyId, actor) {
     this._assertStaff(actor);
-    const emergency = await this.emergencies.findById(emergencyId, {
+    const emergency = await this.emergencies.findByIdOrThrow(emergencyId, 'Emergency', {
       populate: [
         { path: 'patient', select: 'medicalRecordNumber ward' },
         { path: 'reportedBy', select: 'name role' },
@@ -98,16 +78,14 @@ class EmergencyService {
         { path: 'resolvedBy', select: 'name role' },
       ],
     });
-    if (!emergency) throw ApiError.notFound('Emergency');
     return emergency;
   }
 
   /** A patient's alert history — clinical context, so the clinical tier applies. */
   async listForPatient(patientId, actor, query = {}) {
-    const patient = await this.patients.findById(patientId, {
+    const patient = await this.patients.findByIdOrThrow(patientId, 'Patient', {
       projection: 'user ward primaryDoctor assignedNurses',
     });
-    if (!patient) throw ApiError.notFound('Patient');
     if (!accessPolicy.canReadCareData(actor)) {
       throw ApiError.forbidden('Emergency history is visible to clinical staff only');
     }
@@ -122,16 +100,7 @@ class EmergencyService {
 
   // --- Writes ---------------------------------------------------------------
 
-  /**
-   * Raises an alert.
-   *
-   * Deliberately permissive about who: see the class comment. It is also
-   * deliberately cheap — one insert, then a synchronous broadcast, then everything
-   * slow detached. Validation is minimal for the same reason; the only thing that
-   * can reject a report is a malformed type, and a missing patient reference is
-   * dropped rather than raised, because a caller who mistypes a patient id during
-   * a cardiac arrest should still summon the crash team.
-   */
+  /** Raises an alert. */
   async raise(payload = {}, actor) {
     if (!actor) throw ApiError.unauthorized();
 
@@ -186,25 +155,16 @@ class EmergencyService {
     return alert;
   }
 
-  /**
-   * Claims the call.
-   *
-   * The repository's guarded update is the authority. A null return means the
-   * filter matched nothing, which is either "no such alert" or — far more likely —
-   * "somebody else answered a half-second ago". The second case is reported with
-   * the responder's name, because the useful answer to "I tried to take that call"
-   * is who has it, not that you failed.
-   */
+  /** Claims the call. */
   async acknowledge(emergencyId, actor) {
     this._assertResponder(actor);
 
     const claimed = await this.emergencies.acknowledge(emergencyId, actor.id);
     if (!claimed) {
-      const existing = await this.emergencies.findById(emergencyId, {
+      const existing = await this.emergencies.findByIdOrThrow(emergencyId, 'Emergency', {
         projection: 'status acknowledgedBy',
         populate: { path: 'acknowledgedBy', select: 'name role' },
       });
-      if (!existing) throw ApiError.notFound('Emergency');
       const responder = existing.acknowledgedBy;
       throw ApiError.conflict(
         responder
@@ -222,17 +182,7 @@ class EmergencyService {
     return claimed;
   }
 
-  /**
-   * Closes the call.
-   *
-   * Resolution requires notes: an alert that was raised and then silently closed
-   * is indistinguishable from one that was ignored, and this collection is the
-   * evidence trail for incident review.
-   *
-   * An unacknowledged alert can be resolved directly — a false alarm cancelled by
-   * the person who raised it never needs a responder — but the resolver is
-   * recorded either way.
-   */
+  /** Closes the call. */
   async resolve(emergencyId, { notes } = {}, actor) {
     this._assertResponder(actor);
     if (!notes) throw ApiError.badRequest('Resolution notes are required');
@@ -250,8 +200,7 @@ class EmergencyService {
     );
 
     if (!resolved) {
-      const existing = await this.emergencies.findById(emergencyId, { projection: 'status' });
-      if (!existing) throw ApiError.notFound('Emergency');
+      await this.emergencies.findByIdOrThrow(emergencyId, 'Emergency', { projection: 'status' });
       throw ApiError.conflict('This alert is already resolved', { code: 'ALREADY_RESOLVED' });
     }
 
@@ -264,13 +213,7 @@ class EmergencyService {
     return resolved;
   }
 
-  /**
-   * Raises the severity of a live alert.
-   *
-   * Escalation only — severity never drops. Downgrading an alert mid-incident is
-   * how a critical call quietly leaves the board it was meant to stay on; if it
-   * turns out to be a false alarm, resolve it with notes instead.
-   */
+  /** Raises the severity of a live alert. */
   async escalate(emergencyId, severity, actor) {
     this._assertResponder(actor);
     const rank = [
@@ -282,10 +225,9 @@ class EmergencyService {
     const target = rank.indexOf(severity);
     if (target === -1) throw ApiError.badRequest('Unknown severity');
 
-    const emergency = await this.emergencies.findById(emergencyId, {
+    const emergency = await this.emergencies.findByIdOrThrow(emergencyId, 'Emergency', {
       projection: 'severity status type location patient',
     });
-    if (!emergency) throw ApiError.notFound('Emergency');
     if (emergency.status === EMERGENCY_STATUS.RESOLVED) {
       throw ApiError.conflict('A resolved alert cannot be escalated', { code: 'ALREADY_RESOLVED' });
     }
@@ -311,13 +253,7 @@ class EmergencyService {
 
   // --- Reporting ------------------------------------------------------------
 
-  /**
-   * Response-time statistics over a window.
-   *
-   * Computed in the database rather than by pulling documents and reducing in
-   * Node: a year of alerts is a lot of documents to move across the wire to
-   * produce four numbers.
-   */
+  /** Response-time statistics over a window. */
   async responseStats({ from, to } = {}, actor) {
     this._assertStaff(actor);
     const end = to ? new Date(to) : new Date();

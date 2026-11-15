@@ -2,7 +2,7 @@
 
 const express = require('express');
 
-const { authenticate, authLimiter, validate } = require('../middleware');
+const { authenticate, authLimiter, refreshLimiter, validate } = require('../middleware');
 const schemas = require('../validators/auth');
 const controller = require('../controllers/authController');
 
@@ -12,14 +12,14 @@ const controller = require('../controllers/authController');
  * thousands of accounts; keying on email alone lets an attacker lock a known
  * user out of their own account. Both keys, one bucket.
  *
- * `/refresh` is rate-limited too: it is the one unauthenticated endpoint that
- * does real work, so it is the obvious thing to hammer.
+ * `/refresh` has its own `refreshLimiter`, keyed by the refresh token's owner
+ * (the body has no email, so `authLimiter` would bucket a whole NAT together).
  */
 const router = express.Router();
 
 router.post('/register', authLimiter, validate(schemas.register), controller.register);
 router.post('/login', authLimiter, validate(schemas.login), controller.login);
-router.post('/refresh', authLimiter, validate(schemas.refresh), controller.refresh);
+router.post('/refresh', refreshLimiter, validate(schemas.refresh), controller.refresh);
 router.post('/logout', validate(schemas.logout), controller.logout);
 
 router.use(authenticate);

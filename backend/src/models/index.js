@@ -23,5 +23,6 @@ module.exports = {
   Nurse: require('./Nurse'),
   Patient: require('./Patient'),
   Staff: require('./Staff'),
+  StockMovement: require('./StockMovement'),
   User: require('./User'),
 };

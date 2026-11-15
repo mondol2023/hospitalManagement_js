@@ -52,6 +52,7 @@ module.exports = {
   createLimiter: rateLimit.createLimiter,
   globalLimiter: rateLimit.globalLimiter,
   authLimiter: rateLimit.authLimiter,
+  refreshLimiter: rateLimit.refreshLimiter,
   reportLimiter: rateLimit.reportLimiter,
   uploadLimiter: rateLimit.uploadLimiter,
 

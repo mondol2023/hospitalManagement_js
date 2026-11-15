@@ -5,19 +5,8 @@ const env = require('../config/env');
 const logger = require('../config/logger');
 
 /**
- * Read-through cache.
- *
- * Two rules govern everything here:
- *
- *  1. **The cache is never load-bearing.** `createRedisClient` returns `null` when
- *     Redis is disabled, and a live client can still drop mid-request. Every
- *     method therefore swallows its own failure and behaves like a miss, so the
- *     app serves correct (just slower) responses with Redis down. A cache outage
- *     must never become an API outage.
- *  2. **Invalidation is by prefix, not by guesswork.** Writes bump the whole
- *     namespace they touch (`cache.invalidate('doctors')`) rather than trying to
- *     enumerate the exact keys a list endpoint might have produced from arbitrary
- *     `?page/?limit/?sort` combinations.
+ * Read-through cache, never load-bearing: every method swallows its own failure and acts as a miss.
+ * Invalidation is by prefix (SCAN), not by guessing the keys a list produced.
  */
 
 const NAMESPACE = 'hms:v1';
@@ -76,12 +65,7 @@ class CacheService {
     }
   }
 
-  /**
-   * Drops every key under a prefix.
-   *
-   * SCAN, never KEYS: `KEYS *` is O(n) *and* blocks the single Redis thread for
-   * the whole scan, which at 10k users means a visible stall on every write.
-   */
+  /** Drops every key under a prefix. */
   async invalidate(prefix) {
     if (!this.isEnabled) return 0;
     const match = `${NAMESPACE}:${prefix}*`;
@@ -100,12 +84,7 @@ class CacheService {
     }
   }
 
-  /**
-   * Read-through helper: `producer` runs only on a miss.
-   *
-   * A rejected `producer` propagates — a failed database read is a real error and
-   * must not be papered over by the cache layer.
-   */
+  /** Read-through helper: `producer` runs only on a miss. */
   async wrap(key, producer, ttl = this.defaultTtl) {
     const hit = await this.get(key);
     if (hit !== null) return hit;
@@ -135,6 +114,26 @@ class CacheService {
     } catch (error) {
       logger.warn('Cache exists failed', { key, error: error.message });
       return false;
+    }
+  }
+
+  /** Per-feature key builder and invalidator, so services don't repeat the prefix. */
+  namespace(prefix) {
+    return {
+      key: (sub, params) => buildKey(sub ? `${prefix}:${sub}` : prefix, params),
+      invalidate: () => this.invalidate(prefix),
+    };
+  }
+
+  /** Atomic SET NX: true = claimed, false = already taken, null = cache unavailable. */
+  async claim(key, ttl) {
+    if (!this.isEnabled) return null;
+    if (ttl <= 0) return false;
+    try {
+      return (await this.client.set(key, '1', 'EX', ttl, 'NX')) === 'OK';
+    } catch (error) {
+      logger.warn('Cache claim failed', { key, error: error.message });
+      return null;
     }
   }
 

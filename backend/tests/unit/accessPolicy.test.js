@@ -11,6 +11,7 @@ const {
   canReadCareData,
   canWriteCareData,
   canJoinConversation,
+  assertRole,
   toId,
 } = require('../../src/utils/accessPolicy');
 
@@ -261,5 +262,26 @@ describe('accessPolicy — which conversations a role may join', () => {
     expect(canJoinConversation('intruder', CONVERSATION_TYPE.STAFF_ONLY)).toBe(false);
     expect(canJoinConversation(ROLES.PATIENT, 'staff_only ')).toBe(false);
     expect(canJoinConversation(ROLES.PATIENT, undefined)).toBe(false);
+  });
+});
+
+describe('accessPolicy — assertRole', () => {
+  const allowed = [ROLES.ADMIN, ROLES.PHARMACIST];
+
+  it('passes a listed role and refuses everyone else with the given message', () => {
+    expect(() => assertRole(actor(ROLES.PHARMACIST), allowed, 'Pharmacy only')).not.toThrow();
+    for (const role of ROLE_VALUES.filter((r) => !allowed.includes(r))) {
+      expect(() => assertRole(actor(role), allowed, 'Pharmacy only')).toThrow('Pharmacy only');
+    }
+  });
+
+  it('refuses a missing actor with a 403', () => {
+    expect.assertions(2);
+    try {
+      assertRole(undefined, allowed, 'Pharmacy only');
+    } catch (error) {
+      expect(error.statusCode).toBe(403);
+      expect(error.message).toBe('Pharmacy only');
+    }
   });
 });

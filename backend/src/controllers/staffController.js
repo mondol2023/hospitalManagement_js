@@ -1,42 +1,20 @@
 'use strict';
 
-const asyncHandler = require('../utils/asyncHandler');
-const { sendSuccess, sendPage } = require('../utils/apiResponse');
+const handle = require('../utils/handle');
 const staffService = require('../services/staffService');
 
-const list = asyncHandler(async (req, res) => {
-  const page = await staffService.list(req.query);
-  return sendPage(res, page);
-});
+const list = handle.page((req) => staffService.list(req.query));
 
-const me = asyncHandler(async (req, res) => {
-  const profile = await staffService.getByUser(req.user.id);
-  return sendSuccess(res, { data: profile });
-});
+const me = handle((req) => staffService.getByUser(req.user.id));
 
-const updateOwn = asyncHandler(async (req, res) => {
-  const profile = await staffService.updateOwnProfile(req.user.id, req.body);
-  return sendSuccess(res, { data: profile });
-});
+const updateOwn = handle((req) => staffService.updateOwnProfile(req.user.id, req.body));
 
-const setDuty = asyncHandler(async (req, res) => {
-  const profile = await staffService.setDuty(req.user.id, req.body.isOnDuty);
-  return sendSuccess(res, { data: profile });
-});
+const setDuty = handle((req) => staffService.setDuty(req.user.id, req.body.isOnDuty));
 
-const myReports = asyncHandler(async (req, res) => {
-  const data = await staffService.reportsTo(req.user.id);
-  return sendSuccess(res, { data });
-});
+const myReports = handle((req) => staffService.reportsTo(req.user.id));
 
-const getByUser = asyncHandler(async (req, res) => {
-  const profile = await staffService.getByUser(req.params.userId);
-  return sendSuccess(res, { data: profile });
-});
+const getByUser = handle((req) => staffService.getByUser(req.params.userId));
 
-const updateEmployment = asyncHandler(async (req, res) => {
-  const profile = await staffService.updateEmployment(req.params.id, req.body);
-  return sendSuccess(res, { data: profile });
-});
+const updateEmployment = handle((req) => staffService.updateEmployment(req.params.id, req.body));
 
 module.exports = { list, me, updateOwn, setDuty, myReports, getByUser, updateEmployment };

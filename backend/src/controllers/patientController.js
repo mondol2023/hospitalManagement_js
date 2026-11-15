@@ -1,90 +1,56 @@
 'use strict';
 
-const asyncHandler = require('../utils/asyncHandler');
-const { sendSuccess, sendPage } = require('../utils/apiResponse');
+const handle = require('../utils/handle');
 const patientService = require('../services/patientService');
 
 /**
- * Reads go through `patientService.requireVisible` rather than through the
- * `loadPatient` middleware: the service populates the linked user account and
- * applies the same visibility rule, so routing the read through it avoids
- * loading the document twice. Writes keep the middleware, because the care-team
- * decision needs the document *before* the handler runs.
+ * requireVisible` rather than through the `loadPatient` middleware: the service populates the
+ * linked user account and applies the same visibility rule, so routing the read through it
  */
 
-const list = asyncHandler(async (req, res) => {
-  const page = await patientService.list(req.query);
-  return sendPage(res, page);
-});
+const list = handle.page((req) => patientService.list(req.query));
 
-const caseload = asyncHandler(async (req, res) => {
-  const page = await patientService.caseload(req.user.id, req.query);
-  return sendPage(res, page);
-});
+const caseload = handle.page((req) => patientService.caseload(req.user.id, req.query));
 
-const ward = asyncHandler(async (req, res) => {
-  const page = await patientService.ward(req.params.ward, req.query);
-  return sendPage(res, page);
-});
+const ward = handle.page((req) => patientService.ward(req.params.ward, req.query));
 
-const me = asyncHandler(async (req, res) => {
-  const patient = await patientService.requireOwnRecord(req.user.id);
-  return sendSuccess(res, { data: patient });
-});
+const me = handle((req) => patientService.requireOwnRecord(req.user.id));
 
-const updateOwn = asyncHandler(async (req, res) => {
-  const patient = await patientService.updateOwnDetails(req.user.id, req.body);
-  return sendSuccess(res, { data: patient });
-});
+const updateOwn = handle((req) => patientService.updateOwnDetails(req.user.id, req.body));
 
-const byMrn = asyncHandler(async (req, res) => {
-  const patient = await patientService.findByMrn(req.params.mrn, req.user);
-  return sendSuccess(res, { data: patient });
-});
+const uploadAvatar = handle((req) => patientService.setAvatar(req.user.id, req.file));
 
-const getById = asyncHandler(async (req, res) => {
-  const patient = await patientService.resolveForActor(req.user, req.params.patientId);
-  return sendSuccess(res, { data: patient });
-});
+const byMrn = handle((req) => patientService.findByMrn(req.params.mrn, req.user));
 
-const updateClinical = asyncHandler(async (req, res) => {
-  const patient = await patientService.updateClinicalDetails(req.patient._id, req.body);
-  return sendSuccess(res, { data: patient });
-});
+const getById = handle((req) => patientService.resolveForActor(req.user, req.params.patientId));
 
-const assignNurses = asyncHandler(async (req, res) => {
-  const patient = await patientService.assignNurses(
+const updateClinical = handle((req) =>
+  patientService.updateClinicalDetails(req.patient._id, req.body)
+);
+
+const assignNurses = handle((req) =>
+  patientService.assignNurses(
     req.patient._id,
     req.body.nurseUserIds,
     req.user
-  );
-  return sendSuccess(res, { data: patient });
-});
+  )
+);
 
-const unassignNurse = asyncHandler(async (req, res) => {
-  const patient = await patientService.unassignNurse(req.patient._id, req.params.nurseUserId);
-  return sendSuccess(res, { data: patient });
-});
+const unassignNurse = handle((req) =>
+  patientService.unassignNurse(req.patient._id, req.params.nurseUserId)
+);
 
-const setPrimaryDoctor = asyncHandler(async (req, res) => {
-  const patient = await patientService.setPrimaryDoctor(req.patient._id, req.body.doctorUserId);
-  return sendSuccess(res, { data: patient });
-});
+const setPrimaryDoctor = handle((req) =>
+  patientService.setPrimaryDoctor(req.patient._id, req.body.doctorUserId)
+);
 
-const careTeam = asyncHandler(async (req, res) => {
-  const team = await patientService.careTeam(req.patient._id);
-  return sendSuccess(res, { data: team });
-});
+const careTeam = handle((req) => patientService.careTeam(req.patient._id));
 
 /**
- * The actor is passed through because releasing the bed is charted against
- * whoever discharged the patient; without it `bedService` skips the care-log
- * entry and the ward is never told.
+ * The actor is passed through because releasing the bed is charted against whoever discharged
+ * the patient; without it `bedService` skips the care-log entry and the ward is never told.
  */
-const discharge = asyncHandler(async (req, res) => {
-  const patient = await patientService.discharge(req.patient._id, req.body, req.user);
-  return sendSuccess(res, { data: patient });
-});
+const discharge = handle((req) => patientService.discharge(req.patient._id, req.body, req.user));
 
 module.exports = {
   list,
@@ -92,6 +58,7 @@ module.exports = {
   ward,
   me,
   updateOwn,
+  uploadAvatar,
   byMrn,
   getById,
   updateClinical,

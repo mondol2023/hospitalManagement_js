@@ -2,6 +2,7 @@
 
 const {
   z,
+  objectId,
   idParam,
   listQuery,
   shortText,
@@ -23,6 +24,8 @@ const {
  *
  * Unit values mirror `models/Medicine.js`, which remains the authority.
  */
+
+const { STOCK_MOVEMENT_VALUES } = require('../utils/constants');
 
 const UNITS = ['tablet', 'capsule', 'ml', 'mg', 'vial', 'strip', 'bottle'];
 
@@ -57,6 +60,20 @@ const expiring = {
 };
 
 const byId = { params: idParam() };
+
+const movements = {
+  query: listQuery({
+    medicine: objectId.optional(),
+    actor: objectId.optional(),
+    kind: z.enum(STOCK_MOVEMENT_VALUES).optional(),
+    from: dateValue.optional(),
+    to: dateValue.optional(),
+  }),
+};
+
+const stockReport = {
+  query: z.object({ days: z.coerce.number().int().min(1).max(365).optional() }),
+};
 
 const create = {
   body: z.object({
@@ -111,6 +128,8 @@ module.exports = {
   list,
   expiring,
   byId,
+  movements,
+  stockReport,
   create,
   update,
   restock,

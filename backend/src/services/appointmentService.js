@@ -19,27 +19,7 @@ const notificationService = require('./notificationService');
 
 const DUPLICATE_KEY = 11000;
 
-/**
- * Booking and the appointment lifecycle.
- *
- * Double-booking is defended at three depths, deliberately:
- *
- *  1. the requested slot must be one `doctorService.availability` actually offers,
- *     so a client cannot invent a time outside the doctor's working pattern;
- *  2. an overlap query rejects the common case with a clear 409;
- *  3. the partial unique index `uniq_doctor_slot_active` is the final authority —
- *     two requests that pass (2) in the same millisecond cannot both commit, and
- *     the loser's duplicate-key error is translated into the same 409.
- *
- * Layer (3) is the one that actually holds under load; (1) and (2) exist to give
- * a useful error rather than a database code. The original implementation had
- * only a read-then-write check, which is exactly the shape that fails under
- * concurrency.
- *
- * Status changes go through `Appointment.isValidTransition`, so "cancel a
- * completed visit" is impossible from any entry point rather than from whichever
- * controller remembered to check.
- */
+/** Booking and the appointment lifecycle. */
 class AppointmentService {
   constructor({
     appointments = appointmentRepository,
@@ -112,13 +92,12 @@ class AppointmentService {
   }
 
   async getById(appointmentId, actor) {
-    const appointment = await this.appointments.findById(appointmentId, {
+    const appointment = await this.appointments.findByIdOrThrow(appointmentId, 'Appointment', {
       populate: [
         { path: 'doctor', select: 'name email' },
         { path: 'patient', select: 'medicalRecordNumber user ward' },
       ],
     });
-    if (!appointment) throw ApiError.notFound('Appointment');
     await this._assertVisible(appointment, actor);
     return appointment;
   }
@@ -364,8 +343,7 @@ class AppointmentService {
       return own;
     }
     if (!patientId) throw ApiError.badRequest('A patient id is required');
-    const patient = await this.patients.findById(patientId, { projection: '_id user' });
-    if (!patient) throw ApiError.notFound('Patient');
+    const patient = await this.patients.findByIdOrThrow(patientId, 'Patient', { projection: '_id user' });
     return patient;
   }
 
@@ -405,28 +383,21 @@ class AppointmentService {
     return filter;
   }
 
-  /** @private booking notice, where both parties are already loaded. */
+  // Booking notice: both parties are already loaded, and email is worth sending.
   _announce(appointment, patient, doctor, { title, message }) {
-    return this.notifications.notifyMany([patient.user, doctor._id], {
-      title,
-      message,
-      type: NOTIFICATION_TYPE.APPOINTMENT,
-      channels: [NOTIFICATION_CHANNEL.IN_APP, NOTIFICATION_CHANNEL.EMAIL],
-      data: { appointmentId: String(appointment._id || appointment.id) },
-    });
+    return this.notifications.notifyAppointment(
+      appointment._id || appointment.id,
+      [patient.user, doctor._id],
+      { title, message, channels: [NOTIFICATION_CHANNEL.IN_APP, NOTIFICATION_CHANNEL.EMAIL] }
+    );
   }
 
-  /** @private lifecycle notice, where the patient's user id must be looked up. */
+  // Lifecycle notice: the patient's user id has to be looked up first.
   async _notifyParties(appointment, { title, message }) {
     const patient = await this.patients.findById(appointment.patient, { projection: 'user' });
     const recipients = [patient && patient.user, appointment.doctor].filter(Boolean);
     if (!recipients.length) return;
-    await this.notifications.notifyMany(recipients, {
-      title,
-      message,
-      type: NOTIFICATION_TYPE.APPOINTMENT,
-      data: { appointmentId: String(appointment._id) },
-    });
+    await this.notifications.notifyAppointment(appointment._id, recipients, { title, message });
   }
 }
 
