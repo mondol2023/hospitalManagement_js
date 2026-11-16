@@ -39,8 +39,12 @@ export function useLatestVitals(patientId: string | undefined) {
 }
 
 /** The nurse-facing "needs a look" queue. */
-export function useAttentionLogs(params?: { page?: number; limit?: number; ward?: string }) {
+export function useAttentionLogs(
+  params?: { page?: number; limit?: number; ward?: string },
+  { enabled = true }: { enabled?: boolean } = {}
+) {
   return useQuery({
+    enabled,
     queryKey: queryKeys.careLogs.attention(params),
     queryFn: () => careLogsApi.attention(params),
     // Shorter than the global 30s: this list is the reason someone walks to a
