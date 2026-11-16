@@ -88,44 +88,44 @@ export interface RevenueSummary {
 }
 
 export const billingApi = {
-  list: (params?: BillListParams) => api.page<Bill>('/billing', { params }),
+  list: (params?: BillListParams) => api.page<Bill>('/bills', { params }),
 
   outstanding: (params?: { page?: number; limit?: number }) =>
-    api.page<Bill>('/billing/outstanding', { params }),
+    api.page<Bill>('/bills/outstanding', { params }),
 
   revenue: (params?: { from?: string; to?: string }) =>
-    api.get<RevenueSummary>('/billing/revenue', { params }),
+    api.get<RevenueSummary>('/bills/revenue', { params }),
 
   /**
    * What this deployment can actually take money through — not the enum. A
    * deployment with no Stripe key must never offer a button that can only 503.
    */
-  paymentMethods: () => api.get<PaymentMethod[]>('/billing/payment-methods'),
+  paymentMethods: () => api.get<PaymentMethod[]>('/bills/payment-methods'),
 
-  getById: (id: string) => api.get<Bill>(`/billing/${id}`),
+  getById: (id: string) => api.get<Bill>(`/bills/${id}`),
 
   getByInvoiceNumber: (invoiceNumber: string) =>
-    api.get<Bill>(`/billing/invoice/${invoiceNumber}`),
+    api.get<Bill>(`/bills/invoice/${invoiceNumber}`),
 
   listForPatient: (patientId: string, params?: { page?: number; limit?: number; status?: BillStatus }) =>
-    api.page<Bill>(`/billing/patient/${patientId}`, { params }),
+    api.page<Bill>(`/bills/patient/${patientId}`, { params }),
 
   /** Sweeps the patient's unbilled chargeable care onto one invoice. */
   buildFromCare: (patientId: string, terms?: BillTerms) =>
-    api.post<Bill>(`/billing/patient/${patientId}/from-care`, terms ?? {}),
+    api.post<Bill>(`/bills/patient/${patientId}/from-care`, terms ?? {}),
 
-  create: (input: CreateBillInput) => api.post<Bill>('/billing', input),
+  create: (input: CreateBillInput) => api.post<Bill>('/bills', input),
 
-  update: (id: string, input: UpdateBillInput) => api.patch<Bill>(`/billing/${id}`, input),
+  update: (id: string, input: UpdateBillInput) => api.patch<Bill>(`/bills/${id}`, input),
 
-  addItems: (id: string, items: LineItemInput[]) => api.post<Bill>(`/billing/${id}/items`, { items }),
+  addItems: (id: string, items: LineItemInput[]) => api.post<Bill>(`/bills/${id}/items`, { items }),
 
-  issue: (id: string) => api.post<Bill>(`/billing/${id}/issue`, {}),
+  issue: (id: string) => api.post<Bill>(`/bills/${id}/issue`, {}),
 
   void: (id: string, reason?: string) =>
-    api.post<Bill>(`/billing/${id}/void`, reason ? { reason } : {}),
+    api.post<Bill>(`/bills/${id}/void`, reason ? { reason } : {}),
 
-  pay: (id: string, input: PaymentInput) => api.post<Bill>(`/billing/${id}/payments`, input),
+  pay: (id: string, input: PaymentInput) => api.post<Bill>(`/bills/${id}/payments`, input),
 
-  refund: (id: string, input: RefundInput) => api.post<Bill>(`/billing/${id}/refunds`, input),
+  refund: (id: string, input: RefundInput) => api.post<Bill>(`/bills/${id}/refunds`, input),
 };

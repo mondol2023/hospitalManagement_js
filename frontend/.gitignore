@@ -21,3 +21,10 @@ coverage
 # probe for a .js config first, so an emitted one silently wins over its source.
 /vite.config.js
 /tailwind.config.js
+.impeccable
+ARCHITECTURE.md
+AUDIT.md
+IMPROVEMENT_PLAN.md
+FRONTEND_ARCHITECTURE.md
+FRONTEND_PLAN.md
+PRODUCT.md

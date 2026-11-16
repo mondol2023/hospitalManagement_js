@@ -7,7 +7,7 @@ import { ApiError } from '@/shared/api/envelope';
 import { ERROR_CODES } from '@/shared/api/errorCodes';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { Toaster, toast } from '@/shared/ui';
-import { connectAuthBridge } from '@/features/auth';
+import { connectAuthBridge, useAuthStore } from '@/features/auth';
 
 /**
  * Everything the tree needs, mounted once, in dependency order.
@@ -68,6 +68,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
   // unauthenticated.
   useState(() => {
     connectAuthBridge();
+    // The session lives in memory only (auth-store.ts), so a fresh page load
+    // has nothing to restore and "is anyone signed in?" is already answered.
+    // Without this call `isBootstrapping` stays true forever and the guards on
+    // /login and /app show "Checking your session" indefinitely (AUDIT.md B1).
+    // If a refresh-cookie flow ever replaces in-memory tokens, this is the line
+    // that becomes an awaited restore.
+    useAuthStore.getState().finishBootstrap();
     return null;
   });
 

@@ -99,7 +99,7 @@ export function RegisterPage() {
         )}
 
         <fieldset className="flex flex-col gap-4">
-          <legend className="label-eyebrow mb-2">About you</legend>
+          <legend className="mb-2 font-display text-lg font-semibold">About you</legend>
 
           <Field label="Full name" error={errors.name?.message} required>
             <Input autoComplete="name" {...register('name')} />
@@ -154,7 +154,7 @@ export function RegisterPage() {
         </fieldset>
 
         <fieldset className="flex flex-col gap-4 border-t border-line pt-5">
-          <legend className="label-eyebrow mb-2">Emergency contact</legend>
+          <legend className="mb-2 font-display text-lg font-semibold">Emergency contact</legend>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name" error={errors.profile?.emergencyContact?.name?.message} required>

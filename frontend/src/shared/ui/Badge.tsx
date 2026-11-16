@@ -13,7 +13,7 @@ import type { Tone } from '@/shared/lib/status';
  * read; it never carries it alone.
  */
 const badge = cva(
-  'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-display text-2xs font-semibold uppercase tracking-label ring-1 ring-inset',
+  'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-sans text-xs font-medium ring-1 ring-inset',
   {
     variants: {
       tone: {

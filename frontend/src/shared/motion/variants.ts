@@ -25,7 +25,28 @@ export const TRANSITION = {
   /** Hover/press feedback. */
   micro: { duration: 0.12, ease: 'easeOut' },
   spring: { type: 'spring', stiffness: 420, damping: 34, mass: 0.7 },
+  /** Page swap inside the app shell: quick enough that staff never wait on it. */
+  route: { duration: 0.18, ease: [0.22, 1, 0.36, 1] },
+  /** The public wayfinding line drawing itself (`pathLength` 0 → 1). */
+  draw: { duration: 0.9, ease: [0.65, 0, 0.35, 1] },
+  /** An emergency card arriving: stiffer and snappier than `spring`. */
+  alert: { type: 'spring', stiffness: 520, damping: 28 },
+  /** A figure changing value after a refetch or socket event. */
+  number: { duration: 0.4, ease: 'easeOut' },
 } satisfies Record<string, Transition>;
+
+/**
+ * List stagger budget (FRONTEND_PLAN.md §5.1): only the first `max` items are
+ * staggered, `each` seconds apart; everything after them appears with item
+ * `max`. A 40-row ward list must settle in well under a quarter of a second.
+ * Boards with more than 50 tiles should skip stagger entirely.
+ */
+export const STAGGER = { each: 0.03, max: 6 } as const;
+
+/** Delay for the item at `index` in a staggered list, honouring the cap. */
+export function staggerDelay(index: number): number {
+  return Math.min(index, STAGGER.max) * STAGGER.each;
+}
 
 /** The default page/section entrance. */
 export const fadeSlideUp: Variants = {
@@ -55,6 +76,33 @@ export const staggerList: Variants = {
 export const staggerItem: Variants = {
   hidden: { opacity: 0, y: 6 },
   visible: { opacity: 1, y: 0, transition: TRANSITION.enter },
+};
+
+/**
+ * Scroll reveals — public site only (§5.4). Pair with `whileInView="visible"`
+ * and `viewport={{ once: true, amount: 0.25 }}` so each section plays once.
+ * Inside the app, content fades in when it loads, not when it scrolls into view.
+ */
+export const fadeIn: Variants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.32 } },
+};
+
+export const fadeInUp: Variants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: TRANSITION.enter },
+};
+
+/** Enters from the side of whoever is speaking: `1` from the right, `-1` from the left. */
+export const fadeInSide = (dir: 1 | -1): Variants => ({
+  hidden: { opacity: 0, x: 12 * dir },
+  visible: { opacity: 1, x: 0, transition: TRANSITION.enter },
+});
+
+/** Container for a group of `fadeInUp` children; keep groups to four or fewer. */
+export const revealGroup: Variants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
 };
 
 export const modalOverlay: Variants = {

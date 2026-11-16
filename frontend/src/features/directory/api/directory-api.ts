@@ -52,8 +52,11 @@ export interface Nurse extends StaffProfileCore {
 }
 
 export interface StaffMember extends StaffProfileCore {
-  jobTitle?: string;
+  /** The backend's name for a job title. */
+  designation: string;
+  employmentType?: 'full_time' | 'part_time' | 'contract' | 'intern';
   reportsTo?: Ref<User>;
+  notes?: string;
 }
 
 /**

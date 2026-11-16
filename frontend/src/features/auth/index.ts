@@ -15,8 +15,16 @@ export {
   type LoginInput,
   type RegisterInput,
 } from './model/schemas';
-export { useLogin, useLogout, useLogoutEverywhere, useRegister } from './model/use-auth';
+export {
+  useChangePassword,
+  useLogin,
+  useLogout,
+  useLogoutEverywhere,
+  useRegister,
+} from './model/use-auth';
 export { Can, RedirectIfAuthenticated, RequireAuth, RequireRole } from './ui/guards';
 export { useCan } from './model/use-can';
 export { LoginPage } from './ui/LoginPage';
+export { PasswordHelpPage } from './ui/PasswordHelpPage';
 export { RegisterPage } from './ui/RegisterPage';
+export { SecurityPage } from './ui/SecurityPage';

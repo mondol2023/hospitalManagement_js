@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
 import { hasRole, type Role } from '@/shared/lib/roles';
+import { appPath, PUBLIC_ROUTES } from '@/shared/lib/routes';
 import { Spinner } from '@/shared/ui';
 
 import { useAuthStore } from '../model/auth-store';
@@ -41,7 +42,7 @@ export function RequireAuth() {
   if (!isAuthenticated) {
     // `state.from` lets the login screen return them to the page they wanted,
     // and `replace` keeps the guarded URL out of the back-button history.
-    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+    return <Navigate to={PUBLIC_ROUTES.login} replace state={{ from: location.pathname + location.search }} />;
   }
 
   return <Outlet />;
@@ -52,19 +53,19 @@ export function RequireRole({ allow }: { allow: readonly Role[] }) {
   const role = useAuthStore((state) => state.user?.role ?? null);
 
   if (!hasRole(role, allow)) {
-    return <Navigate to="/forbidden" replace />;
+    return <Navigate to={appPath('forbidden')} replace />;
   }
 
   return <Outlet />;
 }
 
-/** Redirects an already-signed-in user away from /login and /register. */
+/** Redirects an already-signed-in user away from /login and /register, into the app. */
 export function RedirectIfAuthenticated({ children }: { children: ReactNode }) {
   const isBootstrapping = useAuthStore((state) => state.isBootstrapping);
   const isAuthenticated = useAuthStore((state) => Boolean(state.accessToken && state.user));
 
   if (isBootstrapping) return <FullPageSpinner />;
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  if (isAuthenticated) return <Navigate to={appPath()} replace />;
   return <>{children}</>;
 }
 

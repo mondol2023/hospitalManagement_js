@@ -293,19 +293,22 @@ mistypes.
 React Router data routers, one route tree, role-gated at the layout level:
 
 ```
-/                      → redirect by role to the right dashboard
+Public site (PublicLayout, no session needed)
+/                      → landing page; signed-in users are sent to /app
 /login, /register
-/patients, /patients/:id
-/appointments, /appointments/calendar
-/care-logs/:patientId
-/beds
-/medicines
-/bills, /bills/:id
-/emergencies
-/chat
-/notifications
-/analytics
+
+Signed-in app (RequireAuth + AppShell, everything under /app)
+/app                   → role-aware dashboard
+/app/patients, /app/patients/:id
+/app/appointments
+/app/beds, /app/billing, /app/pharmacy, /app/emergencies, /app/messages
+/app/forbidden
 ```
+
+The path list lives in `src/app/navigation.ts` (`NAV_ITEMS`), which drives both
+the sidebar and the router's role lookup. Entries marked `planned` are reserved
+for later phases and are not shown or routed yet. Build paths with `appPath()`
+from `@/shared/lib/routes` rather than writing `/app/...` literals.
 
 A `<RequireRole allow={[...]}>` loader-level guard checks the Zustand auth
 store before the route even renders (no flash-of-forbidden-content), backed

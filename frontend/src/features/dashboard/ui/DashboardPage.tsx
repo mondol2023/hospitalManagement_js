@@ -7,6 +7,7 @@ import { selectRole, selectUser, useAuthStore } from '@/features/auth';
 import { ApiError } from '@/shared/api/envelope';
 import { humanizeEnum } from '@/shared/lib/format';
 import { isStaff } from '@/shared/lib/roles';
+import { appPath } from '@/shared/lib/routes';
 import { fadeSlideUp } from '@/shared/motion/variants';
 import {
   Card,
@@ -181,19 +182,19 @@ function LiveTile({
 /** Where a patient lands. No analytics, just the four things they came for. */
 const PATIENT_LINKS = [
   {
-    to: '/appointments',
+    to: appPath('appointments'),
     icon: CalendarDays,
     title: 'Appointments',
     description: 'Book a visit, or check when your next one is.',
   },
   {
-    to: '/billing',
+    to: appPath('billing'),
     icon: Receipt,
     title: 'Bills',
     description: 'Statements, payments and anything outstanding.',
   },
   {
-    to: '/messages',
+    to: appPath('messages'),
     icon: MessageSquare,
     title: 'Messages',
     description: 'Talk to your care team.',

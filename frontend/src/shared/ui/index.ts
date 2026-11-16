@@ -6,6 +6,9 @@
  */
 export { Badge, StatusBadge, SeverityDot, type BadgeProps } from './Badge';
 export { Button, type ButtonProps } from './Button';
+export { buttonVariants } from './buttonVariants';
+export { BrandMark } from './BrandMark';
+export { EmergencyStrip } from './EmergencyStrip';
 export { Card, CardHeader, CardBody, CardFooter, Metric } from './Card';
 export { DataTable, type Column } from './DataTable';
 export { EmptyState, ErrorState } from './EmptyState';

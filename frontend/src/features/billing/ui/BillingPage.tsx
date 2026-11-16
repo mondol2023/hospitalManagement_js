@@ -41,7 +41,7 @@ const PAGE_SIZE = 20;
  * server in cents and is formatted in the invoice's own currency; nothing on
  * this page adds money up itself.
  *
- * The revenue strip is finance-only, matching the backend: `/billing/revenue`
+ * The revenue strip is finance-only, matching the backend: `/bills/revenue`
  * is restricted to accountants, admins and managers, so a receptionist who
  * would only ever see a 403 is not shown a row of empty metrics to puzzle over.
  * The list itself, and taking payment against it, stays open to the wider

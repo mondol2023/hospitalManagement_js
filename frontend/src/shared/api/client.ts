@@ -120,14 +120,22 @@ http.interceptors.response.use(
 
     if (error.response?.status === 401 && config && !config._retried && !isPublic(config.url)) {
       config._retried = true;
+
+      let token: string;
       try {
-        const token = await refreshSession();
-        config.headers.set('Authorization', `Bearer ${token}`);
-        return await http.request(config);
+        token = await refreshSession();
       } catch {
         bridge.onSessionEnded(ERROR_CODES.TOKEN_REVOKED);
         throw new ApiError(ERROR_CODES.TOKEN_REVOKED, 'Your session ended. Please sign in again.', 401);
       }
+
+      // Outside the try on purpose. Once the refresh has worked the session is
+      // alive, so whatever the retry says is the endpoint's own answer — and a
+      // 401 can be exactly that (change-password refuses a wrong current
+      // password with one). Treating it as a dead session would sign someone
+      // out for mistyping a password.
+      config.headers.set('Authorization', `Bearer ${token}`);
+      return http.request(config);
     }
 
     throw toApiError(error);

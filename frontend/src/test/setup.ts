@@ -22,6 +22,23 @@ if (!window.matchMedia) {
   }));
 }
 
+// whileInView (scroll reveals) and the section nav subscribe to this. A no-op
+// is enough: nothing ever intersects, so revealed content stays in the DOM and
+// queryable, which is what the tests need.
+if (!window.IntersectionObserver) {
+  window.IntersectionObserver = class {
+    readonly root = null;
+    readonly rootMargin = '';
+    readonly thresholds = [];
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+  } as unknown as typeof IntersectionObserver;
+}
+
 if (!window.ResizeObserver) {
   window.ResizeObserver = class {
     observe() {}

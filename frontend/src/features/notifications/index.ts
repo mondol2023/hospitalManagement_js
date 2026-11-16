@@ -8,3 +8,4 @@ export {
 } from './model/use-notifications';
 export { NotificationBell } from './ui/NotificationBell';
 export { NotificationItem } from './ui/NotificationItem';
+export { NotificationsPage } from './ui/NotificationsPage';

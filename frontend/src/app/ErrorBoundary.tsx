@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
-import { Button } from '@/shared/ui';
+import { BrandMark, Button } from '@/shared/ui';
 
 interface Props {
   children: ReactNode;
@@ -43,14 +43,22 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!this.state.error) return this.props.children;
 
     return (
-      <div className="flex min-h-screen items-center justify-center bg-canvas px-6">
-        <div className="flex max-w-md flex-col items-center gap-4 text-center">
-          <h1 className="font-display text-xl font-semibold">This screen stopped working</h1>
-          <p className="text-sm text-muted">
-            Nothing you entered was sent. Reload to start again — if it keeps happening, tell your
-            IT team which page you were on.
+      <div className="flex min-h-screen items-center justify-center bg-canvas px-6 py-12">
+        <div className="flex w-full max-w-md flex-col gap-5">
+          <BrandMark />
+          <h1 className="text-2xl sm:text-3xl">Something went wrong on this page</h1>
+          <p className="text-base text-muted">
+            Nothing you entered was sent. Go back to the front page and try again. If it keeps
+            happening, tell the front desk which page you were on.
           </p>
-          <Button onClick={this.handleReload}>Reload the app</Button>
+          <div>
+            <Button size="lg" onClick={this.handleReload}>
+              Back to the front page
+            </Button>
+          </div>
+          <p role="note" className="rounded-control bg-danger-soft px-3 py-2 text-sm text-danger">
+            In an emergency, call your local emergency number first.
+          </p>
         </div>
       </div>
     );

@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { ApiError } from '@/shared/api/envelope';
 import { useDebounce } from '@/shared/hooks/useDebounce';
 import { formatDate } from '@/shared/lib/format';
+import { appPath } from '@/shared/lib/routes';
 import { fadeSlideUp } from '@/shared/motion/variants';
 import type { Patient } from '@/shared/types/domain';
 import {
@@ -154,7 +155,7 @@ export function PatientsPage() {
                 }
               : null
           }
-          onRowClick={(patient) => navigate(`/patients/${patient.id}`)}
+          onRowClick={(patient) => navigate(appPath(`patients/${patient.id}`))}
           skeletonRows={8}
           empty={{
             icon: Users,

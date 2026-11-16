@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { applyServerErrors } from '@/shared/lib/form';
+import { PUBLIC_ROUTES } from '@/shared/lib/routes';
 import { Button, Field, Input } from '@/shared/ui';
 
 import { useAuthStore } from '../model/auth-store';
@@ -50,7 +51,7 @@ export function LoginPage() {
       aside={
         <>
           Registering as a patient?{' '}
-          <Link to="/register" className="font-medium text-brand underline underline-offset-4">
+          <Link to={PUBLIC_ROUTES.register} className="font-medium text-brand underline underline-offset-4">
             Create an account
           </Link>
         </>
@@ -91,6 +92,14 @@ export function LoginPage() {
         <Field label="Password" error={errors.password?.message} required>
           <Input type="password" autoComplete="current-password" {...register('password')} />
         </Field>
+        <p className="text-sm">
+          <Link
+            to={PUBLIC_ROUTES.forgotPassword}
+            className="font-medium text-brand underline underline-offset-4"
+          >
+            Forgot your password?
+          </Link>
+        </p>
 
         <Button type="submit" size="lg" block loading={login.isPending}>
           Sign in

@@ -1,5 +1,6 @@
 import { ShieldOff, Compass } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { appPath } from '@/shared/lib/routes';
 
 import { Button, EmptyState } from '@/shared/ui';
 
@@ -27,7 +28,14 @@ export function ForbiddenPage() {
   );
 }
 
-export function NotFoundPage() {
+/** The recovery link goes to the dashboard inside the app and to the front page outside it. */
+export function NotFoundPage({
+  homeTo = appPath(),
+  homeLabel = 'Back to dashboard',
+}: {
+  homeTo?: string;
+  homeLabel?: string;
+}) {
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <EmptyState
@@ -35,8 +43,8 @@ export function NotFoundPage() {
         title="Page not found"
         description="The link may be out of date, or the record it pointed to has been removed."
         action={
-          <Link to="/">
-            <Button variant="secondary">Back to dashboard</Button>
+          <Link to={homeTo}>
+            <Button variant="secondary">{homeLabel}</Button>
           </Link>
         }
       />

@@ -15,10 +15,11 @@
     "jsx": "react-jsx",
 
     /* Mirrors the `@` alias in vite.config.ts. Without it, tsc resolves nothing
-       the app actually imports and the type checker is decorative. */
-    "baseUrl": ".",
+       the app actually imports and the type checker is decorative. `baseUrl` is
+       omitted on purpose: `paths` resolves relative to this file under
+       `moduleResolution: bundler`, and `baseUrl` is deprecated. */
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     },
 
     /* strict: true is the whole point of typing the client against the

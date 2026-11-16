@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { LogOut, Menu, Moon, Sun } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 
 import { useAuthStore, useLogout } from '@/features/auth';
 import { cn } from '@/shared/lib/cn';
@@ -9,6 +10,8 @@ import { roleLabel } from '@/shared/lib/roles';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { fade } from '@/shared/motion/variants';
 import { Button } from '@/shared/ui';
+
+import { accountItemsFor } from '../navigation';
 
 const iconButton =
   'inline-flex h-9 w-9 items-center justify-center rounded-control text-muted transition-colors hover:bg-surface-raised hover:text-content';
@@ -41,12 +44,29 @@ export function Topbar({ onOpenNav, slot }: { onOpenNav: () => void; slot?: Reac
         )}
       </button>
 
-      {user && <UserMenu name={user.name} role={roleLabel(user.role)} />}
+      {user && (
+        <UserMenu
+          name={user.name}
+          role={roleLabel(user.role)}
+          picture={user.profilePic}
+          links={accountItemsFor(user.role)}
+        />
+      )}
     </header>
   );
 }
 
-function UserMenu({ name, role }: { name: string; role: string }) {
+function UserMenu({
+  name,
+  role,
+  picture,
+  links,
+}: {
+  name: string;
+  role: string;
+  picture?: string;
+  links: ReturnType<typeof accountItemsFor>;
+}) {
   const [open, setOpen] = useState(false);
   const logout = useLogout();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -78,12 +98,16 @@ function UserMenu({ name, role }: { name: string; role: string }) {
         aria-haspopup="menu"
         className="flex items-center gap-2 rounded-control py-1 pl-1 pr-2 transition-colors hover:bg-surface-raised"
       >
-        <span
-          aria-hidden="true"
-          className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-soft font-display text-2xs font-bold text-brand"
-        >
-          {initials(name)}
-        </span>
+        {picture ? (
+          <img src={picture} alt="" className="h-7 w-7 rounded-full object-cover" />
+        ) : (
+          <span
+            aria-hidden="true"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-soft font-display text-2xs font-bold text-brand"
+          >
+            {initials(name)}
+          </span>
+        )}
         <span className="hidden text-left sm:block">
           <span className="block text-xs font-medium leading-tight">{name}</span>
           <span className="block text-2xs leading-tight text-muted">{role}</span>
@@ -104,6 +128,18 @@ function UserMenu({ name, role }: { name: string; role: string }) {
               <p className="truncate text-sm font-medium">{name}</p>
               <p className="text-xs text-muted">{role}</p>
             </div>
+            {links.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className="mt-1 flex h-8 items-center gap-2 rounded-control px-3 text-sm text-muted transition-colors hover:bg-surface-raised hover:text-content"
+              >
+                <item.icon className="h-4 w-4" aria-hidden="true" />
+                {item.label}
+              </Link>
+            ))}
             <Button
               variant="ghost"
               size="sm"

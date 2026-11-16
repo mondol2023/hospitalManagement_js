@@ -23,8 +23,9 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   /**
-   * True until the first render decides there is no session to restore. It
-   * exists so guards do not bounce the user to /login during that first tick.
+   * True until the app has decided whether there is a session to restore, so
+   * guards do not bounce the user to /login in the meantime. Today that is
+   * decided synchronously at startup by `AppProviders` (nothing is persisted).
    */
   isBootstrapping: boolean;
   /** Set when a session ends involuntarily, so /login can explain why. */

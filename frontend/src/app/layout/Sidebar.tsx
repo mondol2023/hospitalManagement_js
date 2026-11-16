@@ -4,6 +4,7 @@ import { cn } from '@/shared/lib/cn';
 import type { Role } from '@/shared/lib/roles';
 
 import { navItemsFor } from '../navigation';
+import { BRAND_NAME } from './brand';
 
 /**
  * Primary navigation.
@@ -60,7 +61,7 @@ export function Wordmark() {
       >
         M
       </span>
-      <span className="font-display text-sm font-semibold tracking-tight">Meridian Health</span>
+      <span className="font-display text-sm font-semibold tracking-tight">{BRAND_NAME}</span>
     </div>
   );
 }

@@ -2,10 +2,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 
 import { ApiError } from '@/shared/api/envelope';
+import { appPath, PUBLIC_ROUTES } from '@/shared/lib/routes';
 import { toast } from '@/shared/ui';
 
 import { authApi } from '../api/auth-api';
-import type { LoginInput, RegisterInput } from './schemas';
+import type { ChangePasswordInput, LoginInput, RegisterInput } from './schemas';
 import { useAuthStore } from './auth-store';
 
 /**
@@ -26,7 +27,7 @@ export function useLogin() {
     onSuccess: (session) => {
       queryClient.clear();
       setSession(session);
-      navigate('/', { replace: true });
+      navigate(appPath(), { replace: true });
     },
     // Deliberately no toast here: the form renders the error inline, next to
     // the fields it concerns. Two surfaces for one failure is noise.
@@ -43,7 +44,7 @@ export function useRegister() {
     onSuccess: (session) => {
       queryClient.clear();
       setSession(session);
-      navigate('/', { replace: true });
+      navigate(appPath(), { replace: true });
     },
   });
 }
@@ -67,7 +68,7 @@ export function useLogout() {
     onSettled: () => {
       clear();
       queryClient.clear();
-      navigate('/login', { replace: true });
+      navigate(PUBLIC_ROUTES.login, { replace: true });
     },
   });
 }
@@ -83,7 +84,28 @@ export function useLogoutEverywhere() {
       toast.success('Signed out everywhere', 'All other devices will need to sign in again.');
       clear();
       queryClient.clear();
-      navigate('/login', { replace: true });
+      navigate(PUBLIC_ROUTES.login, { replace: true });
+    },
+  });
+}
+
+/**
+ * Changing the password signs every *other* device out (the server bumps
+ * `tokensValidFrom`) and hands this one a replacement pair, so the session is
+ * swapped in place rather than ended — the person changing their password
+ * should not be the one who has to sign in again.
+ *
+ * No `onError` toast: the form puts the failure next to the field it concerns.
+ */
+export function useChangePassword() {
+  const setSession = useAuthStore((state) => state.setSession);
+
+  return useMutation({
+    mutationFn: (input: Pick<ChangePasswordInput, 'currentPassword' | 'newPassword'>) =>
+      authApi.changePassword(input),
+    onSuccess: (session) => {
+      setSession(session);
+      toast.success('Password changed', 'Your other devices have been signed out.');
     },
   });
 }

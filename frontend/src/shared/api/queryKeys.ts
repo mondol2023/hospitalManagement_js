@@ -104,6 +104,12 @@ export const queryKeys = {
     unread: ['chat', 'unread'] as const,
   },
 
+  /** Own profile by role — `me` is already taken by patients, so keyed by role. */
+  profile: {
+    all: ['profile'] as const,
+    own: (role: string) => ['profile', role] as const,
+  },
+
   notifications: {
     all: ['notifications'] as const,
     list: (params?: Params) => ['notifications', 'list', params ?? {}] as const,

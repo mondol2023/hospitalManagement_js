@@ -1,8 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Bell, BellOff } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { cn } from '@/shared/lib/cn';
+import { appPath } from '@/shared/lib/routes';
 import { fade } from '@/shared/motion/variants';
 import { Button, EmptyState, SkeletonText } from '@/shared/ui';
 
@@ -131,6 +133,16 @@ export function NotificationBell() {
                   ))}
                 </ul>
               )}
+            </div>
+
+            <div className="border-t border-line px-3 py-2">
+              <Link
+                to={appPath('notifications')}
+                onClick={() => setOpen(false)}
+                className="text-sm font-medium text-brand hover:underline"
+              >
+                See all notifications
+              </Link>
             </div>
           </motion.div>
         )}

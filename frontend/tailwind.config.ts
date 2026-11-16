@@ -10,12 +10,12 @@ import type { Config } from 'tailwindcss';
  * are the same class names with different variable values — no `dark:` variant
  * on every single element.
  *
- * ── Direction: "chart & instrument" ─────────────────────────────────────────
- * Neutrals carry a cool green bias (surgical drape), the single accent is a
- * petrol teal, and the semantic ramp is *reserved*: in a hospital UI red means
- * critical and nothing else, so the accent is never red and success/warning/
- * danger never appear as decoration. Elevation is a 1px line; shadows are for
- * things that genuinely float above the page.
+ * ── Direction: "Wayfinding" (FRONTEND_PLAN.md §3) ───────────────────────────
+ * A sage-tinted ground, a eucalyptus primary and one apricot highlight (`warm`,
+ * a fill — never text). The semantic ramp is *reserved*: in a hospital UI red
+ * means critical and nothing else, so the accent is never red and success/
+ * warning/danger never appear as decoration. Elevation is a 1px line; shadows
+ * are for things that genuinely float above the page.
  */
 export default {
   darkMode: 'class',
@@ -34,6 +34,11 @@ export default {
           fg: 'rgb(var(--color-brand-fg) / <alpha-value>)',
           soft: 'rgb(var(--color-brand-soft) / <alpha-value>)',
         },
+        warm: {
+          DEFAULT: 'rgb(var(--color-warm) / <alpha-value>)',
+          soft: 'rgb(var(--color-warm-soft) / <alpha-value>)',
+          fg: 'rgb(var(--color-warm-fg) / <alpha-value>)',
+        },
         success: {
           DEFAULT: 'rgb(var(--color-success) / <alpha-value>)',
           soft: 'rgb(var(--color-success-soft) / <alpha-value>)',
@@ -51,23 +56,39 @@ export default {
           soft: 'rgb(var(--color-info-soft) / <alpha-value>)',
         },
       },
+      // Radii follow hierarchy: panels 14px, controls 8px, status pills `rounded-full`.
       borderRadius: {
-        control: '0.375rem',
-        card: '0.5rem',
+        control: '0.5rem',
+        card: '0.875rem',
       },
       fontFamily: {
-        // Archivo for headings and anything that has to read as a label.
-        display: ['"Archivo Variable"', 'Archivo', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        // Plex Sans is drawn for dense technical interfaces — it holds up at 13px.
-        sans: ['"IBM Plex Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        // Every identifier and quantity: MRNs, invoice numbers, money, vitals.
-        mono: ['"IBM Plex Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        // Page titles and public headlines. Variable with an optical-size axis
+        // (opsz 12–96), so it tightens up when large and opens up when small.
+        display: ['"Bricolage Grotesque Variable"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // UI and body. Drawn for low-vision readers; `1 l I` and `0 O` are distinct.
+        sans: ['"Atkinson Hyperlegible Next Variable"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Clinical identifiers only — MRNs, doses, invoice numbers, bed codes —
+        // where misreading one character has real consequences.
+        mono: [
+          '"Atkinson Hyperlegible Mono Variable"',
+          'ui-monospace',
+          'SFMono-Regular',
+          'Menlo',
+          'monospace',
+        ],
       },
+      // 1.25 scale: 13 · 15 (app body) · 17 (public body) · 21 · 26 · 33 · 41 · 52.
+      // Body sizes run at 1.5 line height, display sizes at 1.15.
       fontSize: {
-        '2xs': ['0.6875rem', { lineHeight: '1rem' }],
-      },
-      letterSpacing: {
-        label: '0.08em',
+        '2xs': ['0.8125rem', { lineHeight: '1.25rem' }],
+        xs: ['0.8125rem', { lineHeight: '1.25rem' }],
+        sm: ['0.9375rem', { lineHeight: '1.4rem' }],
+        base: ['1.0625rem', { lineHeight: '1.6rem' }],
+        lg: ['1.3125rem', { lineHeight: '1.75rem' }],
+        xl: ['1.625rem', { lineHeight: '1.15' }],
+        '2xl': ['2.0625rem', { lineHeight: '1.15' }],
+        '3xl': ['2.5625rem', { lineHeight: '1.15' }],
+        '4xl': ['3.25rem', { lineHeight: '1.1' }],
       },
       spacing: {
         // Row height tuned for a gloved finger on a ward tablet.
@@ -82,9 +103,15 @@ export default {
         shimmer: {
           '100%': { transform: 'translateX(100%)' },
         },
+        // The public departments strip: the track holds two copies of the list,
+        // so moving half its width is a seamless loop.
+        marquee: {
+          to: { transform: 'translateX(-50%)' },
+        },
       },
       animation: {
         shimmer: 'shimmer 1.6s infinite',
+        marquee: 'marquee 70s linear infinite',
       },
     },
   },
