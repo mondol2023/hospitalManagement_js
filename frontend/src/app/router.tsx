@@ -69,6 +69,13 @@ const PatientsPage = lazy(() =>
 const PatientDetailPage = lazy(() =>
   import('@/features/patients').then((m) => ({ default: m.PatientDetailPage }))
 );
+const WardPage = lazy(() => import('@/features/nurse').then((m) => ({ default: m.WardPage })));
+const HandoverPage = lazy(() =>
+  import('@/features/nurse').then((m) => ({ default: m.HandoverPage }))
+);
+const WorkloadPage = lazy(() =>
+  import('@/features/nurse').then((m) => ({ default: m.WorkloadPage }))
+);
 const BedsPage = lazy(() => import('@/features/beds').then((m) => ({ default: m.BedsPage })));
 const BillingPage = lazy(() =>
   import('@/features/billing').then((m) => ({ default: m.BillingPage }))
@@ -191,6 +198,18 @@ export function AppRouter() {
             <Route element={<RequireRole allow={allowFor(appPath('patients'))} />}>
               <Route path="patients" element={<PatientsPage />} />
               <Route path="patients/:patientId" element={<PatientDetailPage />} />
+            </Route>
+
+            <Route element={<RequireRole allow={allowFor(appPath('ward'))} />}>
+              <Route path="ward" element={<WardPage />} />
+            </Route>
+
+            <Route element={<RequireRole allow={allowFor(appPath('handover'))} />}>
+              <Route path="handover" element={<HandoverPage />} />
+            </Route>
+
+            <Route element={<RequireRole allow={allowFor(appPath('workload'))} />}>
+              <Route path="workload" element={<WorkloadPage />} />
             </Route>
 
             <Route element={<RequireRole allow={allowFor(appPath('beds'))} />}>

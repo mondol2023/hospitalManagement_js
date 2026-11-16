@@ -131,10 +131,10 @@ export const NAV_ITEMS: readonly NavItem[] = [
     planned: true,
   },
 
-  // ── Planned: nurse (phase 4) ───────────────────────────────────────────────
-  { to: appPath('ward'), label: 'My ward', icon: Stethoscope, allow: [ROLES.NURSE], planned: true },
-  { to: appPath('handover'), label: 'Handover', icon: ClipboardList, allow: [ROLES.NURSE], planned: true },
-  { to: appPath('workload'), label: 'Workload', icon: BarChart3, allow: [ROLES.NURSE], planned: true },
+  // ── Nurse (phase 4a) ───────────────────────────────────────────────────────
+  { to: appPath('ward'), label: 'My ward', icon: Stethoscope, allow: [ROLES.NURSE] },
+  { to: appPath('handover'), label: 'Handover', icon: ClipboardList, allow: [ROLES.NURSE] },
+  { to: appPath('workload'), label: 'Workload', icon: BarChart3, allow: [ROLES.NURSE] },
 
   // ── Planned: front desk, pharmacy, finance (phase 4) ───────────────────────
   {

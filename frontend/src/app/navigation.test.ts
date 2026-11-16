@@ -61,4 +61,35 @@ describe('navigation', () => {
       expect(accountItemsFor(null)).toEqual([]);
     });
   });
+
+  describe('nurse pages (phase 4a)', () => {
+    const NURSE_PAGES = [
+      ['/app/ward', 'My ward'],
+      ['/app/handover', 'Handover'],
+      ['/app/workload', 'Workload'],
+    ] as const;
+
+    it('are built, and open to nurses only', () => {
+      for (const [path] of NURSE_PAGES) {
+        const item = NAV_ITEMS.find((entry) => entry.to === path);
+        expect(item, path).toBeDefined();
+        expect(item?.planned, path).toBeFalsy();
+        expect(item?.allow, path).toEqual([ROLES.NURSE]);
+      }
+    });
+
+    it('appear in a nurse’s sidebar, in order', () => {
+      const paths = navItemsFor(ROLES.NURSE).map((item) => item.to);
+      expect(paths.filter((path) => NURSE_PAGES.some(([p]) => p === path))).toEqual(
+        NURSE_PAGES.map(([path]) => path)
+      );
+    });
+
+    it('stay out of every other role’s sidebar', () => {
+      for (const role of Object.values(ROLES).filter((r) => r !== ROLES.NURSE)) {
+        const paths = navItemsFor(role).map((item) => item.to);
+        for (const [path] of NURSE_PAGES) expect(paths, `${path} for ${role}`).not.toContain(path);
+      }
+    });
+  });
 });

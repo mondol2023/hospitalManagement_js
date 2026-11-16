@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '@/features/auth';
 import { profileApi } from '@/features/profile/api/profile-api';
 import { notificationsApi } from '@/features/notifications';
+import type * as ClientModule from '@/shared/api/client';
 import type { Role } from '@/shared/lib/roles';
 
 // The self-service pages are the only private routes exercised here; their
@@ -24,6 +25,19 @@ vi.mock('@/features/profile/api/profile-api', () => ({
     nurse: { get: vi.fn(), update: vi.fn(), setDuty: vi.fn() },
     staff: { get: vi.fn(), update: vi.fn(), setDuty: vi.fn() },
     patient: { get: vi.fn(), update: vi.fn(), uploadAvatar: vi.fn() },
+  },
+}));
+
+// The nurse pages go through the shared client; nothing answers, so they sit in
+// their loading state — this file is about who can reach them, not what they show.
+vi.mock('@/shared/api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof ClientModule>()),
+  api: {
+    get: vi.fn(() => new Promise(() => {})),
+    page: vi.fn(() => new Promise(() => {})),
+    post: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
@@ -152,6 +166,31 @@ describe('route split', () => {
       renderAt('/app/profile');
       expect(await screen.findByRole('heading', { level: 1, name: /my profile/i })).toBeInTheDocument();
       expect(await screen.findByText('Office manager')).toBeInTheDocument();
+    });
+
+    describe('nurse pages', () => {
+      it.each<[string, RegExp]>([
+        ['/app/ward', /^ward$/i],
+        ['/app/handover', /^handover$/i],
+        ['/app/workload', /^workload$/i],
+      ])('opens %s for a nurse', async (path, heading) => {
+        signIn('nurse');
+        renderAt(path);
+        expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
+      });
+
+      it.each<[string, Role]>([
+        ['/app/ward', 'doctor'],
+        ['/app/ward', 'patient'],
+        ['/app/handover', 'admin'],
+        ['/app/handover', 'receptionist'],
+        ['/app/workload', 'doctor'],
+        ['/app/workload', 'patient'],
+      ])('keeps %s closed to a %s', async (path, role) => {
+        signIn(role);
+        renderAt(path);
+        expect(await screen.findByText(/do not have access to this area/i)).toBeInTheDocument();
+      });
     });
 
     it('sends a signed-out visitor from /app/profile to sign-in', async () => {
