@@ -282,6 +282,18 @@ describe('patients — a nurse’s caseload is their own', () => {
     expect(items.map((p) => p.id)).not.toContain(String(theirs.profile._id));
   });
 
+  it('shows which bed each patient is in, not just an id', async () => {
+    const nurse = await createActor(ROLES.NURSE);
+    const bed = await createBed({ ward: 'ICU', bedNumber: 'ICU-07' });
+    const patient = await createAdmittedPatient({ nurses: [nurse], ward: 'ICU', bed });
+
+    const res = await api().get(url('/patients/caseload')).set(nurse.headers);
+    const [row] = expectOk(res);
+
+    expect(row.id).toBe(String(patient.profile._id));
+    expect(row.bed).toMatchObject({ bedNumber: 'ICU-07', ward: 'ICU' });
+  });
+
   it('is a nursing screen, so a doctor has no caseload here', async () => {
     const doctor = await createActor(ROLES.DOCTOR);
 

@@ -47,14 +47,28 @@ class CareLogRepository extends BaseRepository {
     return this.paginate({ ward, supersededBy: null }, query, {
       populate: [
         { path: 'recordedBy', select: 'name role' },
-        { path: 'patient', select: 'medicalRecordNumber user' },
+        {
+          path: 'patient',
+          select: 'medicalRecordNumber user',
+          populate: { path: 'user', select: 'name' },
+        },
       ],
     });
   }
 
-  /** A nurse's own entries — used for shift review and handover. */
+  /**
+   * A nurse's own entries — used for shift review and handover. `type` and a date
+   * range narrow it the same way they do on the patient timeline.
+   */
   recordedByUser(userId, query = {}) {
-    return this.paginate({ recordedBy: userId }, query);
+    const filter = { recordedBy: userId };
+    if (query.type) filter.type = query.type;
+    if (query.from || query.to) {
+      filter.performedAt = {};
+      if (query.from) filter.performedAt.$gte = new Date(query.from);
+      if (query.to) filter.performedAt.$lte = new Date(query.to);
+    }
+    return this.paginate(filter, query);
   }
 
   /**
@@ -67,7 +81,11 @@ class CareLogRepository extends BaseRepository {
     if (ward) filter.ward = ward;
     return this.paginate(filter, query, {
       populate: [
-        { path: 'patient', select: 'medicalRecordNumber user ward' },
+        {
+          path: 'patient',
+          select: 'medicalRecordNumber user ward',
+          populate: { path: 'user', select: 'name' },
+        },
         { path: 'recordedBy', select: 'name role' },
       ],
       lean: true,

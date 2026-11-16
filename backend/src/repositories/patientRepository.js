@@ -30,7 +30,10 @@ class PatientRepository extends BaseRepository {
   /** A nurse's caseload — the first query of every shift. Uses the multikey index. */
   assignedTo(nurseUserId, query = {}) {
     return this.paginate({ assignedNurses: nurseUserId, isAdmitted: true }, query, {
-      populate: { path: 'user', select: 'name phone' },
+      populate: [
+        { path: 'user', select: 'name phone' },
+        { path: 'bed', select: 'bedNumber ward' },
+      ],
     });
   }
 

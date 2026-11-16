@@ -458,3 +458,90 @@ describe('care logs — handover', () => {
     expect(notified[0].title).toBe('Shift handover received');
   });
 });
+
+describe('care logs — naming the patient on ward screens', () => {
+  async function flagged() {
+    const doctor = await createActor(ROLES.DOCTOR);
+    const nurse = await createActor(ROLES.NURSE, { profile: { assignedWards: ['ICU'] } });
+    const patient = await createAdmittedPatient({
+      doctor,
+      nurses: [nurse],
+      ward: 'ICU',
+    });
+    await patient.user.updateOne({ name: 'Marta Vega' });
+    await api()
+      .post(url('/care-logs/observations'))
+      .set(nurse.headers)
+      .send({
+        patientId: String(patient.profile._id),
+        notes: 'Wound site inflamed.',
+        requiresAttention: true,
+      })
+      .expect(201);
+    return { nurse };
+  }
+
+  it('puts the patient’s name on a ward feed row', async () => {
+    const { nurse } = await flagged();
+
+    const res = await api().get(url('/care-logs/ward/ICU')).set(nurse.headers);
+    const [row] = expectOk(res);
+
+    expect(row.patient.user).toMatchObject({ name: 'Marta Vega' });
+  });
+
+  it('puts the patient’s name on an attention queue row', async () => {
+    const { nurse } = await flagged();
+
+    const res = await api().get(url('/care-logs/attention?ward=ICU')).set(nurse.headers);
+    const [row] = expectOk(res);
+
+    expect(row.patient.user).toMatchObject({ name: 'Marta Vega' });
+  });
+});
+
+describe('care logs — my entries, narrowed by type and time', () => {
+  async function chart() {
+    const { nurse, patient } = await admitPatient();
+    const patientId = String(patient.profile._id);
+    const post = (path, body) =>
+      api().post(url(path)).set(nurse.headers).send({ patientId, ...body }).expect(201);
+
+    const old = await post('/care-logs/observations', { notes: 'Last night’s round.' });
+    await post('/care-logs/observations', { notes: 'This shift’s round.' });
+    await post('/care-logs/vitals', { vitals: { heartRateBpm: 72 } });
+    await CareLog.updateOne(
+      { _id: old.body.data.id },
+      { $set: { performedAt: new Date(Date.now() - 48 * 3600 * 1000) } }
+    );
+    return { nurse };
+  }
+
+  it('returns only entries on or after `from`', async () => {
+    const { nurse } = await chart();
+    const from = new Date(Date.now() - 3600 * 1000).toISOString();
+
+    const res = await api().get(url(`/care-logs/me?from=${from}`)).set(nurse.headers);
+
+    expect(expectOk(res)).toHaveLength(2);
+  });
+
+  it('returns only entries on or before `to`', async () => {
+    const { nurse } = await chart();
+    const to = new Date(Date.now() - 3600 * 1000).toISOString();
+
+    const res = await api().get(url(`/care-logs/me?to=${to}`)).set(nurse.headers);
+
+    expect(expectOk(res)).toHaveLength(1);
+  });
+
+  it('filters by type', async () => {
+    const { nurse } = await chart();
+
+    const res = await api().get(url('/care-logs/me?type=vitals')).set(nurse.headers);
+    const items = expectOk(res);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe(CARE_LOG_TYPE.VITALS);
+  });
+});

@@ -28,6 +28,7 @@ class NurseRepository extends BaseRepository {
     return this.model
       .find({ isOnDuty: true, isActive: true, assignedWards: ward })
       .select('user assignedWards grade')
+      .populate({ path: 'user', select: 'name' })
       .lean()
       .exec();
   }

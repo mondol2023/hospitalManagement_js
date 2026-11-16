@@ -101,7 +101,13 @@ const wardFeed = {
   query: listQuery({ type: z.enum(CARE_LOG_TYPE_VALUES).optional() }),
 };
 
-const myEntries = { query: listQuery({ type: z.enum(CARE_LOG_TYPE_VALUES).optional() }) };
+const myEntries = {
+  query: listQuery({
+    type: z.enum(CARE_LOG_TYPE_VALUES).optional(),
+    from: dateValue.optional(),
+    to: dateValue.optional(),
+  }),
+};
 
 const attentionQueue = { query: listQuery({ ward: shortText(60).optional() }) };
 
