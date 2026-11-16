@@ -359,6 +359,16 @@ export interface CareLog {
   type: CareLogType;
   recordedBy: Ref<User>;
   recordedAt: ISODateString;
+  /** When the care happened. The backend sends this, not `recordedAt`. */
+  performedAt?: ISODateString;
+  /** The ward the entry was written in; frozen at write time. */
+  ward?: string;
+  handover?: {
+    toNurse: Ref<User>;
+    summary: string;
+    outstandingTasks?: string[];
+    acceptedAt?: ISODateString;
+  };
   notes?: string;
   requiresAttention?: boolean;
   acknowledgedBy?: Ref<User> | null;

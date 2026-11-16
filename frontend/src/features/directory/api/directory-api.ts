@@ -51,6 +51,17 @@ export interface Nurse extends StaffProfileCore {
   maxPatients: number;
 }
 
+/**
+ * A row of the on-duty list: a trimmed projection, not a full nurse profile.
+ * `user` carries the name; use it as the receiver's id for a handover.
+ */
+export interface OnDutyNurse {
+  id: string;
+  user: Pick<User, 'id' | 'name'>;
+  assignedWards: string[];
+  grade: Nurse['grade'];
+}
+
 export interface StaffMember extends StaffProfileCore {
   /** The backend's name for a job title. */
   designation: string;
@@ -97,7 +108,7 @@ export const directoryApi = {
   nurses: (params?: DirectoryParams) => api.page<Nurse>('/nurses', { params }),
 
   nursesOnDuty: (ward: string) =>
-    api.get<Nurse[]>(`/nurses/ward/${encodeURIComponent(ward)}/on-duty`),
+    api.get<OnDutyNurse[]>(`/nurses/ward/${encodeURIComponent(ward)}/on-duty`),
 
   staff: (params?: DirectoryParams) => api.page<StaffMember>('/staff', { params }),
 };

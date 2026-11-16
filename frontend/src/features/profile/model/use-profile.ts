@@ -64,6 +64,8 @@ export function useSetDuty(kind: Exclude<ProfileKind, 'patient'>) {
       queryClient.setQueryData(queryKeys.profile.own(kind), profile);
       // Directory lists show who is on duty; they are now stale.
       void queryClient.invalidateQueries({ queryKey: queryKeys.directory.all });
+      // On-duty lists (handover targets) and workload read this flag too.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.nurses.all });
       toast.success(profile.isOnDuty ? 'You’re on duty' : 'You’re off duty');
     },
     onError: (error) => {

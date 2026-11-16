@@ -12,6 +12,7 @@ export {
   type Doctor,
   type DoctorAvailability,
   type Nurse,
+  type OnDutyNurse,
   type StaffMember,
   type StaffProfileCore,
   type TimeSlot,
@@ -21,6 +22,7 @@ export {
   useDoctorAvailability,
   useDoctors,
   useNurses,
+  useOnDutyNurses,
   useSpecializations,
   useStaff,
 } from './model/use-directory';

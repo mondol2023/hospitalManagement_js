@@ -38,6 +38,19 @@ export interface CareLogParams {
   to?: ISODateString;
 }
 
+/**
+ * Mirrors the backend `handover` validator: summary up to 4000 characters, up
+ * to 50 outstanding tasks of up to 300 characters each.
+ */
+export interface HandoverInput {
+  patientId: string;
+  toNurseUserId: string;
+  summary: string;
+  outstandingTasks?: string[];
+}
+
+export const HANDOVER_LIMITS = { summary: 4000, tasks: 50, taskLength: 300 } as const;
+
 export const careLogsApi = {
   byPatient: (patientId: string, params?: CareLogParams) =>
     api.page<CareLog>(`/care-logs/patient/${patientId}`, { params }),
@@ -49,7 +62,11 @@ export const careLogsApi = {
   attention: (params?: { page?: number; limit?: number; ward?: string }) =>
     api.page<CareLog>('/care-logs/attention', { params }),
 
-  byWard: (ward: string) => api.page<CareLog>(`/care-logs/ward/${encodeURIComponent(ward)}`),
+  byWard: (ward: string, params?: CareLogParams) =>
+    api.page<CareLog>(`/care-logs/ward/${encodeURIComponent(ward)}`, { params }),
+
+  /** What the signed-in clinician recorded themselves, newest first. */
+  mine: (params?: CareLogParams) => api.page<CareLog>('/care-logs/me', { params }),
 
   logVitals: (input: { patientId: string; vitals: Vitals; notes?: string }) =>
     api.post<CareLog>('/care-logs/vitals', input),
@@ -72,8 +89,7 @@ export const careLogsApi = {
   logProcedure: (input: { patientId: string; description: string; chargeableCents?: Cents }) =>
     api.post<CareLog>('/care-logs/procedures', input),
 
-  logHandover: (input: { patientId: string; notes: string }) =>
-    api.post<CareLog>('/care-logs/handovers', input),
+  logHandover: (input: HandoverInput) => api.post<CareLog>('/care-logs/handovers', input),
 
   acknowledge: (logId: string) => api.post<CareLog>(`/care-logs/${logId}/acknowledge`),
 

@@ -48,10 +48,14 @@ export function useOwnPatientRecord(enabled = true) {
   });
 }
 
-export function useCaseload(params?: { page?: number; limit?: number }) {
+export function useCaseload(
+  params?: { page?: number; limit?: number },
+  { enabled = true }: { enabled?: boolean } = {}
+) {
   return useQuery({
     queryKey: queryKeys.patients.caseload(params),
     queryFn: () => patientsApi.caseload(params),
+    enabled,
   });
 }
 

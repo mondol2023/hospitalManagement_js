@@ -22,6 +22,19 @@ export function useSpecializations() {
   });
 }
 
+/**
+ * Nurses on shift in a ward — the people a handover can go to. Short stale time:
+ * duty status changes while someone is filling the form in.
+ */
+export function useOnDutyNurses(ward: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.nurses.onDuty(ward ?? ''),
+    queryFn: () => directoryApi.nursesOnDuty(ward as string),
+    enabled: Boolean(ward),
+    staleTime: 30_000,
+  });
+}
+
 export function useNurses(params?: DirectoryParams) {
   return useQuery({
     queryKey: queryKeys.directory.nurses(params),

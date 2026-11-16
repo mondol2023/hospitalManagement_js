@@ -85,7 +85,18 @@ export const queryKeys = {
       ['care-logs', 'patient', patientId, params ?? {}] as const,
     latestVitals: (patientId: string) => ['care-logs', 'patient', patientId, 'vitals'] as const,
     attention: (params?: Params) => ['care-logs', 'attention', params ?? {}] as const,
-    ward: (ward: string) => ['care-logs', 'ward', ward] as const,
+    ward: (ward: string, params?: Params) => ['care-logs', 'ward', ward, params ?? {}] as const,
+    mine: (params?: Params) => ['care-logs', 'mine', params ?? {}] as const,
+  },
+
+  /**
+   * The signed-in nurse's own profile lives under `profile.own('nurse')`, so
+   * this holds only what is nurse-specific and not already a profile.
+   */
+  nurses: {
+    all: ['nurses'] as const,
+    workload: ['nurses', 'workload'] as const,
+    onDuty: (ward: string) => ['nurses', 'on-duty', ward] as const,
   },
 
   medicalRecords: {

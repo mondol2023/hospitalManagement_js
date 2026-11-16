@@ -8,6 +8,7 @@ import {
   careLogsApi,
   medicalRecordsApi,
   type CareLogParams,
+  type HandoverInput,
   type MedicalRecordInput,
   type Vitals,
 } from '../api/care-api';
@@ -48,6 +49,25 @@ export function useAttentionLogs(params?: { page?: number; limit?: number; ward?
   });
 }
 
+/** The nurses' station feed for one ward. Disabled until a ward is chosen. */
+export function useWardFeed(ward: string | undefined, params?: CareLogParams) {
+  return useQuery({
+    queryKey: queryKeys.careLogs.ward(ward ?? '', params),
+    queryFn: () => careLogsApi.byWard(ward as string, params),
+    enabled: Boolean(ward),
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** What the signed-in clinician has recorded themselves. */
+export function useMyCareLogs(params?: CareLogParams) {
+  return useQuery({
+    queryKey: queryKeys.careLogs.mine(params),
+    queryFn: () => careLogsApi.mine(params),
+    placeholderData: (previous) => previous,
+  });
+}
+
 export function useLogVitals(patientId: string) {
   const queryClient = useQueryClient();
 
@@ -78,13 +98,42 @@ export function useLogObservation(patientId: string) {
 
 export function useAcknowledgeCareLog() {
   const queryClient = useQueryClient();
+  const refresh = () => queryClient.invalidateQueries({ queryKey: queryKeys.careLogs.all });
 
   return useMutation({
     mutationFn: (logId: string) => careLogsApi.acknowledge(logId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.careLogs.all });
+      void refresh();
+      toast.success('Entry acknowledged');
     },
-    onError: reportFailure('Could not acknowledge that entry'),
+    onError: (error) => {
+      // Acknowledgement is first-responder-wins. Losing the race is an expected
+      // outcome, not a failure: say so, and refetch so the entry leaves the list.
+      if (error instanceof ApiError && error.status === 409) {
+        void refresh();
+        toast.info('Already picked up by a colleague');
+        return;
+      }
+      reportFailure('Could not acknowledge that entry')(error);
+    },
+  });
+}
+
+/**
+ * Hands a patient over to the next nurse. The receiver's name rides along only
+ * so the toast can say who was told; it is not sent to the server.
+ */
+export function useLogHandover() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ input }: { input: HandoverInput; receiverName: string }) =>
+      careLogsApi.logHandover(input),
+    onSuccess: (_log, { receiverName }) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.careLogs.all });
+      toast.success(`Handover sent to ${receiverName}`);
+    },
+    onError: reportFailure('Could not send that handover'),
   });
 }
 

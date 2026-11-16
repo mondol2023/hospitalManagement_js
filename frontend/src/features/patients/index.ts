@@ -6,7 +6,9 @@ export { patientsApi, type CareTeam, type ClinicalUpdate, type PatientListParams
 export {
   careLogsApi,
   medicalRecordsApi,
+  HANDOVER_LIMITS,
   type CareLogParams,
+  type HandoverInput,
   type MedicalRecord,
   type MedicalRecordInput,
   type Vitals,
@@ -18,10 +20,14 @@ export {
   useCareLogs,
   useCreateMedicalRecord,
   useFollowUps,
+  useAcknowledgeCareLog,
   useLatestVitals,
+  useLogHandover,
   useLogObservation,
   useLogVitals,
   useMedicalRecords,
+  useMyCareLogs,
+  useWardFeed,
   useOwnMedicalRecords,
 } from './model/use-care';
 export {
