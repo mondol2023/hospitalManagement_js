@@ -1,14 +1,13 @@
 import { useNurseProfile } from '@/features/profile';
-import { ApiError } from '@/shared/api/envelope';
 import { cn } from '@/shared/lib/cn';
-import { Button, Card, CardBody, PageHeader, Skeleton } from '@/shared/ui';
+import { Card, CardBody, PageHeader, Skeleton } from '@/shared/ui';
 
 import { useAttentionForWards } from '../model/use-attention';
 import { useWorkload } from '../model/use-nurse';
 import { AttentionPanel } from './AttentionPanel';
-import { CapacityMeter } from './CapacityMeter';
 import { CaseloadPanel } from './CaseloadPanel';
 import { DutySwitch } from './DutySwitch';
+import { WorkloadMeter } from './WorkloadMeter';
 
 /** The backend's default `maxPatients`, used only if the workload request fails. */
 const FALLBACK_CAPACITY = 12;
@@ -53,29 +52,7 @@ export function NurseDashboard({ name }: { name?: string }) {
 
       <Card className="mb-4">
         <CardBody>
-          {workload.isLoading ? (
-            <div aria-hidden="true" className="flex flex-col gap-2">
-              <Skeleton className="h-5 w-40" />
-              <Skeleton className="h-2 w-full rounded-full" />
-            </div>
-          ) : workload.data ? (
-            <CapacityMeter
-              assigned={workload.data.assigned}
-              capacity={workload.data.capacity}
-              atCapacity={workload.data.atCapacity}
-            />
-          ) : (
-            <div className="flex flex-wrap items-center justify-between gap-2" role="alert">
-              <p className="text-sm text-muted">
-                {workload.error instanceof ApiError
-                  ? workload.error.userMessage
-                  : 'Couldn’t load your patient count.'}
-              </p>
-              <Button size="sm" variant="secondary" onClick={() => void workload.refetch()}>
-                Try again
-              </Button>
-            </div>
-          )}
+          <WorkloadMeter />
         </CardBody>
       </Card>
 

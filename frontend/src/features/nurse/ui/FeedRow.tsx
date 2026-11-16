@@ -10,9 +10,10 @@ import { entryTime, logPatientId, logPatientName } from '../model/display';
 
 interface FeedRowProps {
   log: CareLog;
-  onAcknowledge: (logId: string) => void;
+  /** Leave out on a list of one's own entries: there is nothing to acknowledge there. */
+  onAcknowledge?: (logId: string) => void;
   /** True while this row's own acknowledge request is in flight. */
-  acknowledging: boolean;
+  acknowledging?: boolean;
 }
 
 /**
@@ -20,12 +21,13 @@ interface FeedRowProps {
  * was written and who wrote it. A flagged entry nobody has picked up carries
  * its Acknowledge button; once someone has, it says who.
  */
-export function FeedRow({ log, onAcknowledge, acknowledging }: FeedRowProps) {
+export function FeedRow({ log, onAcknowledge, acknowledging = false }: FeedRowProps) {
   const id = logPatientId(log.patient);
   const name = logPatientName(log.patient);
   const text = log.type === 'handover' ? log.handover?.summary : log.notes;
   const acknowledger = log.acknowledgedBy ? userName(log.acknowledgedBy, 'a colleague') : null;
-  const needsAttention = Boolean(log.requiresAttention) && !log.acknowledgedBy;
+  const needsAttention =
+    Boolean(onAcknowledge) && Boolean(log.requiresAttention) && !log.acknowledgedBy;
 
   return (
     <li className="flex items-start justify-between gap-3 px-4 py-3">
@@ -57,7 +59,7 @@ export function FeedRow({ log, onAcknowledge, acknowledging }: FeedRowProps) {
           variant="secondary"
           loading={acknowledging}
           aria-label={`Acknowledge entry for ${name}`}
-          onClick={() => onAcknowledge(log.id)}
+          onClick={() => onAcknowledge?.(log.id)}
         >
           Acknowledge
         </Button>

@@ -64,8 +64,12 @@ export function useWardFeed(ward: string | undefined, params?: CareLogParams) {
 }
 
 /** What the signed-in clinician has recorded themselves. */
-export function useMyCareLogs(params?: CareLogParams) {
+export function useMyCareLogs(
+  params?: CareLogParams,
+  { enabled = true }: { enabled?: boolean } = {}
+) {
   return useQuery({
+    enabled,
     queryKey: queryKeys.careLogs.mine(params),
     queryFn: () => careLogsApi.mine(params),
     placeholderData: (previous) => previous,
