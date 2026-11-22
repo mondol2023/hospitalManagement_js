@@ -26,6 +26,17 @@ export interface BookAppointmentInput {
   reason?: string;
 }
 
+/**
+ * A row of the doctor's day. Not a full `Appointment`: there is no `doctor` (it
+ * is the caller) and no timestamps. `patient` carries the MRN and, inside it,
+ * the user's name — but stays a `Ref`, so a deleted patient renders as a
+ * placeholder rather than crashing the list.
+ */
+export type DayAgendaRow = Pick<
+  Appointment,
+  'id' | 'scheduledAt' | 'endsAt' | 'durationMinutes' | 'status' | 'reason' | 'patient'
+>;
+
 export const appointmentsApi = {
   list: (params?: AppointmentListParams) => api.page<Appointment>('/appointments', { params }),
 
@@ -35,9 +46,14 @@ export const appointmentsApi = {
   byDoctor: (userId: string, params?: AppointmentListParams) =>
     api.page<Appointment>(`/appointments/doctor/${userId}`, { params }),
 
-  /** One doctor's day, ordered — the clinic column view. */
-  daySchedule: (userId: string, date: string) =>
-    api.get<Appointment[]>(`/appointments/doctor/${userId}/day`, { params: { date } }),
+  /**
+   * One doctor's day, ordered by time. `date` is `YYYY-MM-DD`; the backend cuts
+   * days at UTC midnight. Finished visits are left out unless `includeClosed`.
+   */
+  daySchedule: (userId: string, date: string, { includeClosed = false } = {}) =>
+    api.get<DayAgendaRow[]>(`/appointments/doctor/${userId}/day`, {
+      params: includeClosed ? { date, includeClosed } : { date },
+    }),
 
   getById: (id: string) => api.get<Appointment>(`/appointments/${id}`),
 

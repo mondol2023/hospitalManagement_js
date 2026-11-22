@@ -193,6 +193,42 @@ describe('route split', () => {
       });
     });
 
+    describe('doctor pages', () => {
+      it.each<[string, RegExp]>([
+        ['/app/schedule', /^my day$/i],
+        ['/app/records', /^my records$/i],
+        ['/app/follow-ups', /^follow-ups$/i],
+      ])('opens %s for a doctor', async (path, heading) => {
+        signIn('doctor');
+        renderAt(path);
+        expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
+      });
+
+      it.each<[Role]>([['admin'], ['manager']])('opens follow-ups for a %s', async (role) => {
+        signIn(role);
+        renderAt('/app/follow-ups');
+        expect(
+          await screen.findByRole('heading', { level: 1, name: /^follow-ups$/i })
+        ).toBeInTheDocument();
+      });
+
+      it.each<[string, Role]>([
+        ['/app/schedule', 'nurse'],
+        ['/app/schedule', 'receptionist'],
+        ['/app/schedule', 'admin'],
+        ['/app/records', 'nurse'],
+        ['/app/records', 'receptionist'],
+        ['/app/records', 'patient'],
+        ['/app/follow-ups', 'nurse'],
+        ['/app/follow-ups', 'receptionist'],
+        ['/app/follow-ups', 'patient'],
+      ])('keeps %s closed to a %s', async (path, role) => {
+        signIn(role);
+        renderAt(path);
+        expect(await screen.findByText(/do not have access to this area/i)).toBeInTheDocument();
+      });
+    });
+
     it('sends a signed-out visitor from /app/profile to sign-in', async () => {
       renderAt('/app/profile');
       expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument();

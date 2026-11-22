@@ -7,8 +7,15 @@ export interface Toast {
   tone: Extract<Tone, 'success' | 'warning' | 'danger' | 'info'>;
   title: string;
   description?: string;
+  /** One follow-on step the toast offers; pressing it runs `onClick` and dismisses the toast. */
+  action?: ToastAction;
   /** Milliseconds before auto-dismiss. `null` means it stays until dismissed. */
   duration: number | null;
+}
+
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
 }
 
 interface ToastState {
@@ -52,8 +59,15 @@ export const useToastStore = create<ToastState>((set) => ({
  * it has looked up from the keyboard.
  */
 export const toast = {
-  success: (title: string, description?: string) =>
-    useToastStore.getState().push({ tone: 'success', title, description }),
+  success: (title: string, description?: string, action?: ToastAction) =>
+    useToastStore.getState().push({
+      tone: 'success',
+      title,
+      description,
+      action,
+      // Long enough to reach the button; a plain success is a glance.
+      ...(action && { duration: 8000 }),
+    }),
   info: (title: string, description?: string) =>
     useToastStore.getState().push({ tone: 'info', title, description }),
   warning: (title: string, description?: string) =>

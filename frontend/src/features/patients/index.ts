@@ -6,20 +6,26 @@ export { patientsApi, type CareTeam, type ClinicalUpdate, type PatientListParams
 export {
   careLogsApi,
   medicalRecordsApi,
+  ATTACHMENT_LIMITS,
+  CONSULTATION_LIMITS,
   HANDOVER_LIMITS,
+  type Attachment,
   type CareLogParams,
+  type FollowUpParams,
+  type FollowUpRow,
   type HandoverInput,
   type MedicalRecord,
   type MedicalRecordInput,
+  type Prescription,
   type Vitals,
   type VitalsLog,
 } from './api/care-api';
 
 export {
+  APPOINTMENT_ALREADY_RECORDED,
   useAttentionLogs,
   useCareLogs,
   useCreateMedicalRecord,
-  useFollowUps,
   useAcknowledgeCareLog,
   useLatestVitals,
   useLogHandover,
@@ -28,7 +34,6 @@ export {
   useMedicalRecords,
   useMyCareLogs,
   useWardFeed,
-  useOwnMedicalRecords,
 } from './model/use-care';
 export {
   useCareTeam,

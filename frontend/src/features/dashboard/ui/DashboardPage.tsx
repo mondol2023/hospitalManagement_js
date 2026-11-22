@@ -1,4 +1,5 @@
 import { selectRole, selectUser, useAuthStore } from '@/features/auth';
+import { DoctorDashboard } from '@/features/doctor';
 import { NurseDashboard } from '@/features/nurse';
 import { isStaff } from '@/shared/lib/roles';
 
@@ -22,6 +23,8 @@ export function DashboardPage() {
   if (!isStaff(role)) return <PatientHome name={user?.name} />;
 
   if (role === 'nurse') return <NurseDashboard name={user?.name} />;
+
+  if (role === 'doctor') return <DoctorDashboard name={user?.name} />;
 
   return <StaffDashboard name={user?.name} />;
 }

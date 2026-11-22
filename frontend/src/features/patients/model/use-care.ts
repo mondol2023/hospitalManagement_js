@@ -159,30 +159,37 @@ export function useMedicalRecords(
   });
 }
 
-export function useOwnMedicalRecords(params?: { page?: number; limit?: number }) {
-  return useQuery({
-    queryKey: queryKeys.medicalRecords.byPatient('me', params),
-    queryFn: () => medicalRecordsApi.mine(params),
-    placeholderData: (previous) => previous,
-  });
-}
+/** The backend's code for a second record against the same appointment (409). */
+export const APPOINTMENT_ALREADY_RECORDED = 'APPOINTMENT_ALREADY_RECORDED';
 
-export function useFollowUps(params?: { page?: number; limit?: number }) {
-  return useQuery({
-    queryKey: queryKeys.medicalRecords.followUps(params),
-    queryFn: () => medicalRecordsApi.followUps(params),
-  });
-}
-
-export function useCreateMedicalRecord() {
+/**
+ * `onOpenRecord` is where "Add attachments" on the success toast goes: files can
+ * only be attached to a record that is saved, so the toast is where the next
+ * step is offered. Without it the toast carries no action.
+ */
+export function useCreateMedicalRecord({
+  onOpenRecord,
+}: { onOpenRecord?: (recordId: string) => void } = {}) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (input: MedicalRecordInput) => medicalRecordsApi.create(input),
-    onSuccess: () => {
+    onSuccess: (saved) => {
+      // Records carry the follow-up lists with them; appointments are refreshed
+      // because a visit written up from "My day" changes what that row offers.
       void queryClient.invalidateQueries({ queryKey: queryKeys.medicalRecords.all });
-      toast.success('Consultation recorded');
+      void queryClient.invalidateQueries({ queryKey: queryKeys.appointments.all });
+      toast.success(
+        'Consultation recorded',
+        undefined,
+        onOpenRecord && { label: 'Add attachments', onClick: () => onOpenRecord(saved.id) }
+      );
     },
-    onError: reportFailure('Could not save that consultation'),
+    onError: (error) => {
+      // The form says this one itself and stays open; a second, persistent toast
+      // would repeat it.
+      if (error instanceof ApiError && error.code === APPOINTMENT_ALREADY_RECORDED) return;
+      reportFailure('Could not save that consultation')(error);
+    },
   });
 }

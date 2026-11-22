@@ -1,12 +1,12 @@
 import { motion } from 'framer-motion';
 import { Activity, AlertTriangle, ClipboardList, FileText, Stethoscope } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ComponentType } from 'react';
 import { useParams } from 'react-router-dom';
 
 import { Can, useCan } from '@/features/auth';
 import { ApiError } from '@/shared/api/envelope';
 import { formatDate, formatDateTime, formatRelative, humanizeEnum } from '@/shared/lib/format';
-import { ADMIN_ROLES, CLINICAL_ROLES } from '@/shared/lib/roles';
+import { ADMIN_ROLES, CLINICAL_ROLES, ROLES } from '@/shared/lib/roles';
 import { fadeSlideUp, staggerItem, staggerList } from '@/shared/motion/variants';
 import { refObject } from '@/shared/types/domain';
 import {
@@ -31,10 +31,39 @@ import { ClinicalEditModal } from './ClinicalEditModal';
 
 type Tab = 'care' | 'records';
 
-export function PatientDetailPage() {
+/**
+ * The slice that owns the full-record view is `features/doctor`, which already
+ * depends on this one, so the chart cannot import it back. The app shell hands
+ * it in instead; without one, consultation rows are plain text.
+ */
+export type RecordDrawerComponent = ComponentType<{
+  recordId: string | null;
+  onClose: () => void;
+}>;
+
+/**
+ * The consultation form is the doctor slice's too, injected for the same reason.
+ * `onOpenRecord` is how its "Add attachments" toast reaches the drawer.
+ */
+export type ConsultationFormComponent = ComponentType<{
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  patient: { id: string; name: string };
+  onOpenRecord?: (recordId: string) => void;
+}>;
+
+export function PatientDetailPage({
+  RecordDrawer,
+  ConsultationForm,
+}: {
+  RecordDrawer?: RecordDrawerComponent;
+  ConsultationForm?: ConsultationFormComponent;
+} = {}) {
   const { patientId } = useParams<{ patientId: string }>();
   const [tab, setTab] = useState<Tab>('care');
+  const [openRecordId, setOpenRecordId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [consulting, setConsulting] = useState(false);
   const [confirmDischarge, setConfirmDischarge] = useState(false);
 
   const { data: patient, isLoading, error } = usePatient(patientId);
@@ -67,6 +96,11 @@ export function PatientDetailPage() {
         description={`MRN ${patient.medicalRecordNumber ?? '—'} · ${patient.age} yrs · ${humanizeEnum(patient.gender)}`}
         action={
           <div className="flex items-center gap-2">
+            {ConsultationForm && (
+              <Can roles={[ROLES.DOCTOR]}>
+                <Button onClick={() => setConsulting(true)}>Add consultation</Button>
+              </Can>
+            )}
             {canEditClinical && (
               <Button variant="secondary" onClick={() => setEditing(true)}>
                 Edit clinical
@@ -132,7 +166,10 @@ export function PatientDetailPage() {
             {tab === 'care' ? (
               <CareLogList patientId={patient.id} />
             ) : (
-              <MedicalRecordList patientId={patient.id} />
+              <MedicalRecordList
+                patientId={patient.id}
+                onOpen={RecordDrawer ? setOpenRecordId : undefined}
+              />
             )}
           </Card>
         </div>
@@ -161,6 +198,19 @@ export function PatientDetailPage() {
           <CareTeamPanel patientId={patient.id} />
         </div>
       </div>
+
+      {RecordDrawer && (
+        <RecordDrawer recordId={openRecordId} onClose={() => setOpenRecordId(null)} />
+      )}
+
+      {ConsultationForm && (
+        <ConsultationForm
+          open={consulting}
+          onOpenChange={setConsulting}
+          patient={{ id: patient.id, name }}
+          onOpenRecord={RecordDrawer ? setOpenRecordId : undefined}
+        />
+      )}
 
       <ClinicalEditModal
         open={editing}
@@ -217,7 +267,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function VitalsPanel({ patientId }: { patientId: string }) {
+/** Exported for tests only; the slice's public surface is `index.ts`. */
+export function VitalsPanel({ patientId }: { patientId: string }) {
   const { data, isLoading } = useLatestVitals(patientId);
   const vitals = data?.vitals;
 
@@ -239,11 +290,13 @@ function VitalsPanel({ patientId }: { patientId: string }) {
         {vitals && (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <Metric label="Temp" value={vitals.temperatureC ?? '—'} detail="°C" />
-            <Metric label="Heart rate" value={vitals.heartRate ?? '—'} detail="bpm" />
+            <Metric label="Heart rate" value={vitals.heartRateBpm ?? '—'} detail="bpm" />
             <Metric
               label="Blood pressure"
               value={
-                vitals.systolic && vitals.diastolic ? `${vitals.systolic}/${vitals.diastolic}` : '—'
+                vitals.systolicBp && vitals.diastolicBp
+                  ? `${vitals.systolicBp}/${vitals.diastolicBp}`
+                  : '—'
               }
               detail="mmHg"
             />
@@ -318,7 +371,15 @@ function CareLogList({ patientId }: { patientId: string }) {
   );
 }
 
-function MedicalRecordList({ patientId }: { patientId: string }) {
+/** Exported for tests only; the slice's public surface is `index.ts`. */
+export function MedicalRecordList({
+  patientId,
+  onOpen,
+}: {
+  patientId: string;
+  /** Makes each row open that record in full; rows are plain text without it. */
+  onOpen?: (recordId: string) => void;
+}) {
   const { data, isLoading, error } = useMedicalRecords(patientId, { limit: 20 });
 
   if (error) {
@@ -348,19 +409,38 @@ function MedicalRecordList({ patientId }: { patientId: string }) {
 
   return (
     <ul className="divide-y divide-line">
-      {data.items.map((record) => (
-        <li key={record.id} className="px-4 py-3">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="font-medium">{record.diagnosis}</p>
-            <span className="text-xs text-muted">{formatDate(record.visitDate)}</span>
-          </div>
-          <p className="mt-0.5 text-xs text-muted">
-            {refObject(record.doctor)?.name ?? 'Doctor'}
-            {record.followUpDate ? ` · follow-up ${formatDate(record.followUpDate)}` : ''}
-          </p>
-          {record.treatment && <p className="mt-1 text-sm text-content">{record.treatment}</p>}
-        </li>
-      ))}
+      {data.items.map((record) => {
+        const summary = (
+          <>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="font-medium">{record.diagnosis}</p>
+              <span className="text-xs text-muted">{formatDate(record.visitDate)}</span>
+            </div>
+            <p className="mt-0.5 text-xs text-muted">
+              {refObject(record.doctor)?.name ?? 'Doctor'}
+              {record.followUpDate ? ` · follow-up ${formatDate(record.followUpDate)}` : ''}
+            </p>
+            {record.treatmentPlan && (
+              <p className="mt-1 text-sm text-content">{record.treatmentPlan}</p>
+            )}
+          </>
+        );
+        return (
+          <li key={record.id}>
+            {onOpen ? (
+              <button
+                type="button"
+                onClick={() => onOpen(record.id)}
+                className="block w-full px-4 py-3 text-left transition-colors hover:bg-surface-raised"
+              >
+                {summary}
+              </button>
+            ) : (
+              <div className="px-4 py-3">{summary}</div>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

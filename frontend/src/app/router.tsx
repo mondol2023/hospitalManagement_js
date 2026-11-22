@@ -66,8 +66,26 @@ const AppointmentsPage = lazy(() =>
 const PatientsPage = lazy(() =>
   import('@/features/patients').then((m) => ({ default: m.PatientsPage }))
 );
-const PatientDetailPage = lazy(() =>
-  import('@/features/patients').then((m) => ({ default: m.PatientDetailPage }))
+// The chart opens full consultation records and writes new ones, both of which
+// the doctor slice draws. The doctor slice already depends on patients, so the
+// chart cannot import it back; this is the one place that sees both and joins them.
+const PatientDetailPage = lazy(async () => {
+  const [{ PatientDetailPage: Chart }, { RecordDrawer, ConsultationForm }] = await Promise.all([
+    import('@/features/patients'),
+    import('@/features/doctor'),
+  ]);
+  return {
+    default: () => <Chart RecordDrawer={RecordDrawer} ConsultationForm={ConsultationForm} />,
+  };
+});
+const SchedulePage = lazy(() =>
+  import('@/features/doctor').then((m) => ({ default: m.SchedulePage }))
+);
+const RecordsPage = lazy(() =>
+  import('@/features/doctor').then((m) => ({ default: m.RecordsPage }))
+);
+const FollowUpsPage = lazy(() =>
+  import('@/features/doctor').then((m) => ({ default: m.FollowUpsPage }))
 );
 const WardPage = lazy(() => import('@/features/nurse').then((m) => ({ default: m.WardPage })));
 const HandoverPage = lazy(() =>
@@ -198,6 +216,18 @@ export function AppRouter() {
             <Route element={<RequireRole allow={allowFor(appPath('patients'))} />}>
               <Route path="patients" element={<PatientsPage />} />
               <Route path="patients/:patientId" element={<PatientDetailPage />} />
+            </Route>
+
+            <Route element={<RequireRole allow={allowFor(appPath('schedule'))} />}>
+              <Route path="schedule" element={<SchedulePage />} />
+            </Route>
+
+            <Route element={<RequireRole allow={allowFor(appPath('records'))} />}>
+              <Route path="records" element={<RecordsPage />} />
+            </Route>
+
+            <Route element={<RequireRole allow={allowFor(appPath('follow-ups'))} />}>
+              <Route path="follow-ups" element={<FollowUpsPage />} />
             </Route>
 
             <Route element={<RequireRole allow={allowFor(appPath('ward'))} />}>

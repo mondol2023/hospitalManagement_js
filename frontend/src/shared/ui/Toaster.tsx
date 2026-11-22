@@ -47,6 +47,18 @@ function ToastRow({ item }: { item: Toast }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-content">{item.title}</p>
         {item.description && <p className="mt-0.5 text-xs text-muted">{item.description}</p>}
+        {item.action && (
+          <button
+            type="button"
+            onClick={() => {
+              item.action?.onClick();
+              dismiss(item.id);
+            }}
+            className="mt-1.5 text-xs font-medium text-brand underline-offset-2 hover:underline"
+          >
+            {item.action.label}
+          </button>
+        )}
       </div>
       <button
         type="button"

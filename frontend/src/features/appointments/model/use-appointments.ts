@@ -66,11 +66,17 @@ export function usePatientAppointments(
   });
 }
 
-export function useDoctorDaySchedule(userId: string | undefined, date: string) {
+export function useDoctorDaySchedule(
+  userId: string | undefined,
+  date: string,
+  { includeClosed = false }: { includeClosed?: boolean } = {}
+) {
   return useQuery({
-    queryKey: queryKeys.appointments.byDoctorDay(userId ?? '', date),
-    queryFn: () => appointmentsApi.daySchedule(userId as string, date),
+    queryKey: queryKeys.appointments.byDoctorDay(userId ?? '', date, includeClosed),
+    queryFn: () => appointmentsApi.daySchedule(userId as string, date, { includeClosed }),
     enabled: Boolean(userId && date),
+    // Stepping to another day keeps the previous one on screen until it lands.
+    placeholderData: (previous) => previous,
   });
 }
 

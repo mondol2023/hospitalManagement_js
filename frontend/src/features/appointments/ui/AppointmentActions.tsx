@@ -22,7 +22,18 @@ import {
  * cancel their own appointment but never confirm or complete one (the backend's
  * `denyPatients` gate on those three routes).
  */
-export function AppointmentActions({ appointment }: { appointment: Appointment }) {
+export function AppointmentActions({
+  appointment,
+  onCompleted,
+}: {
+  /** Only what the buttons read, so the doctor's day rows (which are not full `Appointment`s) fit. */
+  appointment: Pick<Appointment, 'id' | 'status'>;
+  /**
+   * Fires once the server has accepted "Complete" — never on failure, and never
+   * for the other actions. "My day" uses it to offer writing the visit up.
+   */
+  onCompleted?: (id: string) => void;
+}) {
   const [cancelling, setCancelling] = useState(false);
 
   const confirm = useConfirmAppointment();
@@ -60,7 +71,12 @@ export function AppointmentActions({ appointment }: { appointment: Appointment }
             variant="secondary"
             disabled={busy}
             loading={complete.isPending}
-            onClick={() => complete.mutate({ id: appointment.id })}
+            onClick={() =>
+              complete.mutate(
+                { id: appointment.id },
+                { onSuccess: () => onCompleted?.(appointment.id) }
+              )
+            }
           >
             Complete
           </Button>

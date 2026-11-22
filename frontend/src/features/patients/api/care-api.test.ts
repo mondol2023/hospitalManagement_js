@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '@/shared/api/client';
 
-import { careLogsApi } from './care-api';
+import { careLogsApi, medicalRecordsApi } from './care-api';
 
 vi.mock('@/shared/api/client', () => ({
   api: { get: vi.fn(), post: vi.fn(), page: vi.fn(), patch: vi.fn(), delete: vi.fn(), put: vi.fn() },
@@ -64,5 +64,50 @@ describe('careLogsApi.acknowledge', () => {
     await careLogsApi.acknowledge('log1');
 
     expect(api.post).toHaveBeenCalledWith('/care-logs/log1/acknowledge');
+  });
+});
+
+describe('medicalRecordsApi.followUps', () => {
+  // The first wrapper sent `from`/`to`, which the validator silently drops, so
+  // every call came back with the default window.
+  it('sends the window the backend validates, and nothing it would drop', async () => {
+    await medicalRecordsApi.followUps({ overdue: true, doctorId: 'd1', page: 2, limit: 10 });
+
+    expect(api.page).toHaveBeenCalledWith('/medical-records/follow-ups', {
+      params: { overdue: true, doctorId: 'd1', page: 2, limit: 10 },
+    });
+  });
+
+  it('passes the upcoming window as days', async () => {
+    await medicalRecordsApi.followUps({ days: 30 });
+
+    expect(api.page).toHaveBeenCalledWith('/medical-records/follow-ups', { params: { days: 30 } });
+  });
+});
+
+describe('medicalRecordsApi.remind', () => {
+  it('posts the window as a query parameter, since the route reads req.query', async () => {
+    vi.mocked(api.post).mockResolvedValue({ due: 3, sent: 2 });
+
+    const result = await medicalRecordsApi.remind({ days: 1 });
+
+    expect(api.post).toHaveBeenCalledWith('/medical-records/follow-ups/remind', undefined, {
+      params: { days: 1 },
+    });
+    expect(result).toEqual({ due: 3, sent: 2 });
+  });
+});
+
+describe('medicalRecordsApi.addAttachments', () => {
+  it('sends every file under the field `files` and lets the browser write the boundary', async () => {
+    const scan = new File(['a'], 'scan.png', { type: 'image/png' });
+    const report = new File(['b'], 'report.pdf', { type: 'application/pdf' });
+
+    await medicalRecordsApi.addAttachments('r1', [scan, report]);
+
+    const [url, body, config] = vi.mocked(api.post).mock.calls[0]!;
+    expect(url).toBe('/medical-records/r1/attachments');
+    expect((body as FormData).getAll('files')).toEqual([scan, report]);
+    expect(config).toEqual({ headers: { 'Content-Type': undefined } });
   });
 });

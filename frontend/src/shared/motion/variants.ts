@@ -79,6 +79,24 @@ export const staggerItem: Variants = {
 };
 
 /**
+ * A list row that staggers by its own index, for lists that are not wrapped in a
+ * `staggerList` parent (a table or a timeline whose rows are not direct children).
+ * Pass the row's index as `custom`.
+ *
+ * The delay lives inside the variant on purpose: framer-motion lets a variant's
+ * own `transition` replace the element's `transition` prop, so a delay given as
+ * a prop beside `staggerItem` is silently dropped and every row arrives at once.
+ */
+export const staggerRow: Variants = {
+  hidden: { opacity: 0, y: 6 },
+  visible: (index: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { ...TRANSITION.enter, delay: staggerDelay(index) },
+  }),
+};
+
+/**
  * Scroll reveals — public site only (§5.4). Pair with `whileInView="visible"`
  * and `viewport={{ once: true, amount: 0.25 }}` so each section plays once.
  * Inside the app, content fades in when it loads, not when it scrolls into view.
@@ -115,6 +133,16 @@ export const modalPanel: Variants = {
   hidden: { opacity: 0, y: 12, scale: 0.985 },
   visible: { opacity: 1, y: 0, scale: 1, transition: TRANSITION.spring },
   exit: { opacity: 0, y: 8, scale: 0.99, transition: TRANSITION.exit },
+};
+
+/**
+ * A side sheet arriving from the right edge it is anchored to. Transform and
+ * opacity only; leaving is quicker than arriving.
+ */
+export const drawerPanel: Variants = {
+  hidden: { opacity: 0, x: 32 },
+  visible: { opacity: 1, x: 0, transition: TRANSITION.enter },
+  exit: { opacity: 0, x: 24, transition: TRANSITION.exit },
 };
 
 /** Height animation for disclosure panels — filter drawers, row detail. */

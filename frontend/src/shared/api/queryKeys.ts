@@ -37,8 +37,9 @@ export const queryKeys = {
     all: ['appointments'] as const,
     list: (params?: Params) => ['appointments', 'list', params ?? {}] as const,
     detail: (id: string) => ['appointments', 'detail', id] as const,
-    byDoctorDay: (userId: string, date: string) =>
-      ['appointments', 'doctor', userId, 'day', date] as const,
+    /** `includeClosed` is part of the key: with and without finished visits are different lists. */
+    byDoctorDay: (userId: string, date: string, includeClosed = false) =>
+      ['appointments', 'doctor', userId, 'day', date, { includeClosed }] as const,
     byPatient: (patientId: string, params?: Params) =>
       ['appointments', 'patient', patientId, params ?? {}] as const,
     availability: (userId: string, date: string) =>
@@ -104,6 +105,9 @@ export const queryKeys = {
     byPatient: (patientId: string, params?: Params) =>
       ['medical-records', 'patient', patientId, params ?? {}] as const,
     detail: (id: string) => ['medical-records', 'detail', id] as const,
+    /** What the signed-in doctor wrote — not `byPatient('me')`, which is a patient's own history. */
+    authored: (params?: Params) => ['medical-records', 'authored', params ?? {}] as const,
+    /** Params carry the tab (`overdue` / `days`) and the doctor filter, so each gets its own entry. */
     followUps: (params?: Params) => ['medical-records', 'follow-ups', params ?? {}] as const,
   },
 

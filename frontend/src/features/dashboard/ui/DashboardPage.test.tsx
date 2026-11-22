@@ -8,6 +8,7 @@ import { DashboardPage } from './DashboardPage';
 
 // Each view has its own tests; here only the choice between them is under test.
 vi.mock('@/features/nurse', () => ({ NurseDashboard: () => <p>nurse view</p> }));
+vi.mock('@/features/doctor', () => ({ DoctorDashboard: () => <p>doctor view</p> }));
 vi.mock('./StaffDashboard', () => ({ StaffDashboard: () => <p>staff view</p> }));
 vi.mock('./PatientHome', () => ({ PatientHome: () => <p>patient view</p> }));
 
@@ -36,7 +37,14 @@ describe('DashboardPage', () => {
     expect(screen.getByText('nurse view')).toBeInTheDocument();
   });
 
-  it.each(['doctor', 'admin', 'manager', 'receptionist', 'pharmacist', 'accountant'] as Role[])(
+  it('gives a doctor the doctor dashboard', () => {
+    signInAs('doctor');
+    render(<DashboardPage />);
+    expect(screen.getByText('doctor view')).toBeInTheDocument();
+    expect(screen.queryByText('staff view')).not.toBeInTheDocument();
+  });
+
+  it.each(['admin', 'manager', 'receptionist', 'pharmacist', 'accountant'] as Role[])(
     'keeps today’s board for a %s',
     (role) => {
       signInAs(role);

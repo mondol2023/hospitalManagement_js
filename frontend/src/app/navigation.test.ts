@@ -62,6 +62,58 @@ describe('navigation', () => {
     });
   });
 
+  describe('doctor pages (phase 4b)', () => {
+    const DOCTOR_ONLY = ['/app/schedule', '/app/records'];
+    const FOLLOW_UPS = '/app/follow-ups';
+
+    it('are built', () => {
+      for (const path of [...DOCTOR_ONLY, FOLLOW_UPS]) {
+        const item = NAV_ITEMS.find((entry) => entry.to === path);
+        expect(item, path).toBeDefined();
+        expect(item?.planned, path).toBeFalsy();
+      }
+    });
+
+    it('open My day and Records to doctors only', () => {
+      for (const path of DOCTOR_ONLY) {
+        expect(NAV_ITEMS.find((entry) => entry.to === path)?.allow, path).toEqual([ROLES.DOCTOR]);
+      }
+    });
+
+    it('open Follow-ups to doctors and admin roles, not nurses', () => {
+      expect(NAV_ITEMS.find((entry) => entry.to === FOLLOW_UPS)?.allow).toEqual([
+        ROLES.DOCTOR,
+        ROLES.ADMIN,
+        ROLES.MANAGER,
+      ]);
+    });
+
+    it('appear in a doctor’s sidebar, in order', () => {
+      const paths = navItemsFor(ROLES.DOCTOR).map((item) => item.to);
+      const mine = [...DOCTOR_ONLY, FOLLOW_UPS];
+      expect(paths.filter((path) => mine.includes(path))).toEqual(mine);
+    });
+
+    it('show admin roles Follow-ups only', () => {
+      for (const role of [ROLES.ADMIN, ROLES.MANAGER]) {
+        const paths = navItemsFor(role).map((item) => item.to);
+        expect(paths).toContain(FOLLOW_UPS);
+        for (const path of DOCTOR_ONLY) expect(paths, `${path} for ${role}`).not.toContain(path);
+      }
+    });
+
+    it('stay out of every other role’s sidebar', () => {
+      const allowed: readonly string[] = [ROLES.DOCTOR, ROLES.ADMIN, ROLES.MANAGER];
+      const others = Object.values(ROLES).filter((r) => !allowed.includes(r));
+      for (const role of others) {
+        const paths = navItemsFor(role).map((item) => item.to);
+        for (const path of [...DOCTOR_ONLY, FOLLOW_UPS]) {
+          expect(paths, `${path} for ${role}`).not.toContain(path);
+        }
+      }
+    });
+  });
+
   describe('nurse pages (phase 4a)', () => {
     const NURSE_PAGES = [
       ['/app/ward', 'My ward'],

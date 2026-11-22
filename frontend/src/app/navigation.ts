@@ -120,15 +120,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: appPath('my-health'), label: 'My health', icon: HeartPulse, allow: [ROLES.PATIENT], planned: true },
   { to: appPath('my-care-team'), label: 'My care team', icon: UsersRound, allow: [ROLES.PATIENT], planned: true },
 
-  // ── Planned: doctor (phase 4) ──────────────────────────────────────────────
-  { to: appPath('schedule'), label: 'My day', icon: CalendarClock, allow: [ROLES.DOCTOR], planned: true },
-  { to: appPath('records'), label: 'Records', icon: FileText, allow: [ROLES.DOCTOR], planned: true },
+  // ── Doctor (phase 4b) ──────────────────────────────────────────────────────
+  // Follow-ups is the one page admin roles share: they read every doctor's list
+  // and send the reminders. Nurses have no caseload here, so they are left out.
+  { to: appPath('schedule'), label: 'My day', icon: CalendarClock, allow: [ROLES.DOCTOR] },
+  { to: appPath('records'), label: 'Records', icon: FileText, allow: [ROLES.DOCTOR] },
   {
     to: appPath('follow-ups'),
     label: 'Follow-ups',
     icon: ClipboardList,
     allow: [ROLES.DOCTOR, ...ADMIN_ROLES],
-    planned: true,
   },
 
   // ── Nurse (phase 4a) ───────────────────────────────────────────────────────
