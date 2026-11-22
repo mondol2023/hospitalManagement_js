@@ -4,7 +4,9 @@ import type {
   BillStatus,
   Cents,
   ISODateString,
+  PatientSummary,
   PaymentMethod,
+  Ref,
 } from '@/shared/types/domain';
 
 /**
@@ -27,7 +29,12 @@ export interface BillListParams {
   status?: BillStatus;
   patientId?: string;
   overdue?: boolean;
+  /** Patient list only: `unpaid` and `partially_paid`. Overrides `status`. */
+  open?: boolean;
 }
+
+/** What `/bills/patient/:id` reads. A patient's own view is the `me` form. */
+export type PatientBillParams = Pick<BillListParams, 'page' | 'limit' | 'status' | 'open'>;
 
 export interface LineItemInput {
   description: string;
@@ -87,11 +94,26 @@ export interface RevenueSummary {
   >;
 }
 
+/**
+ * A row of `GET /bills/outstanding`: the patient is populated with the MRN and
+ * the user's name. There is no `balanceCents` — it is a model virtual and is
+ * lost on the lean read — so the balance is `totalCents - paidCents`, through
+ * `balanceCents()` in `shared/lib/money`.
+ */
+export type OutstandingBill = Omit<Bill, 'patient'> & { patient: Ref<PatientSummary> | null };
+
+export interface OutstandingParams {
+  page?: number;
+  limit?: number;
+  /** `createdAt` is oldest first; `-createdAt` is newest first. */
+  sort?: string;
+}
+
 export const billingApi = {
   list: (params?: BillListParams) => api.page<Bill>('/bills', { params }),
 
-  outstanding: (params?: { page?: number; limit?: number }) =>
-    api.page<Bill>('/bills/outstanding', { params }),
+  outstanding: (params?: OutstandingParams) =>
+    api.page<OutstandingBill>('/bills/outstanding', { params }),
 
   revenue: (params?: { from?: string; to?: string }) =>
     api.get<RevenueSummary>('/bills/revenue', { params }),
@@ -107,7 +129,7 @@ export const billingApi = {
   getByInvoiceNumber: (invoiceNumber: string) =>
     api.get<Bill>(`/bills/invoice/${invoiceNumber}`),
 
-  listForPatient: (patientId: string, params?: { page?: number; limit?: number; status?: BillStatus }) =>
+  listForPatient: (patientId: string, params?: PatientBillParams) =>
     api.page<Bill>(`/bills/patient/${patientId}`, { params }),
 
   /** Sweeps the patient's unbilled chargeable care onto one invoice. */

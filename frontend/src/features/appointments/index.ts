@@ -5,6 +5,7 @@
 export {
   appointmentsApi,
   type AppointmentListParams,
+  type ArrivalAppointment,
   type BookAppointmentInput,
   type DayAgendaRow,
 } from './api/appointments-api';

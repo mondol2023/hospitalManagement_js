@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Plus, Receipt } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { ApiError } from '@/shared/api/envelope';
 import { formatDate, humanizeEnum } from '@/shared/lib/format';
@@ -48,6 +49,9 @@ const PAGE_SIZE = 20;
  * billing group. Hiding it is a courtesy, not the control — the server is.
  */
 export function BillingPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  // `?patient=` narrows the ledger to one patient (the front desk links here).
+  const patientId = searchParams.get('patient') ?? '';
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<BillStatus | ''>('');
@@ -61,11 +65,12 @@ export function BillingPage() {
     () => ({
       page,
       limit: PAGE_SIZE,
+      ...(patientId ? { patientId } : {}),
       ...(search ? { search } : {}),
       ...(status ? { status } : {}),
       ...(overdueOnly ? { overdue: true } : {}),
     }),
-    [page, search, status, overdueOnly]
+    [page, patientId, search, status, overdueOnly]
   );
 
   const { data, isLoading, error } = useBills(params);
@@ -180,7 +185,7 @@ export function BillingPage() {
     [issue, voidBill]
   );
 
-  const filtered = Boolean(search || status || overdueOnly);
+  const filtered = Boolean(patientId || search || status || overdueOnly);
 
   return (
     <motion.div variants={fadeSlideUp} initial="hidden" animate="visible">
@@ -245,6 +250,7 @@ export function BillingPage() {
                 setStatus('');
                 setOverdueOnly(false);
                 setPage(1);
+                setSearchParams({});
               }}
             >
               Clear filters

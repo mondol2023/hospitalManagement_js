@@ -56,17 +56,42 @@ export interface AdjustInput {
   reason: string;
 }
 
+/**
+ * A batch as the expiry shelf and the write-off summary carry it: just enough
+ * to name it and count it. `unit` is included because "40" alone is ambiguous
+ * (tablets, or millilitres?).
+ */
+export type ExpiryBatch = Pick<
+  Medicine,
+  'id' | 'name' | 'batchNumber' | 'quantity' | 'unit' | 'expiryDate'
+>;
+
+/**
+ * What `POST /medicines/withdraw-expired` reports. It is a write-off: each
+ * batch goes to zero and leaves circulation. `items[].quantity` is the amount
+ * that was written off, and `units` is their sum. The set may differ from the
+ * list the user confirmed (a batch can expire or be dispensed in between), so
+ * the server's numbers are the ones to report.
+ */
+export interface WithdrawResult {
+  withdrawn: number;
+  units: number;
+  items: ExpiryBatch[];
+}
+
 export const medicinesApi = {
   list: (params?: MedicineListParams) => api.page<Medicine>('/medicines', { params }),
 
   lowStock: () => api.get<Medicine[]>('/medicines/low-stock'),
 
-  expiring: (days?: number) => api.get<Medicine[]>('/medicines/expiring', { params: { days } }),
+  /** Everything due by `now + days`, already-expired batches included. */
+  expiring: (days?: number) =>
+    api.get<ExpiryBatch[]>('/medicines/expiring', { params: { days } }),
 
   expired: () => api.get<Medicine[]>('/medicines/expired'),
 
-  /** Deactivates every expired batch in one sweep; returns how many were pulled. */
-  withdrawExpired: () => api.post<{ withdrawn: number }>('/medicines/withdraw-expired', {}),
+  /** Writes off every expired batch in one sweep and reports what it took. */
+  withdrawExpired: () => api.post<WithdrawResult>('/medicines/withdraw-expired', {}),
 
   getById: (id: string) => api.get<Medicine>(`/medicines/${id}`),
 

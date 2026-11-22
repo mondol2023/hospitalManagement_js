@@ -2,9 +2,11 @@ export { medicinesApi } from './api/medicines-api';
 export type {
   AdjustInput,
   CreateMedicineInput,
+  ExpiryBatch,
   MedicineCatalogueInput,
   MedicineListParams,
   UpdateMedicineInput,
+  WithdrawResult,
 } from './api/medicines-api';
 export {
   useAdjustMedicine,

@@ -136,7 +136,9 @@ export function PublicLayout() {
             <span className="font-display text-base font-semibold">{BRAND_NAME}</span>
           </Link>
 
-          <nav aria-label="Main" className="ml-6 hidden items-center gap-1 md:flex">
+          <div className="flex-1" />
+
+          <nav aria-label="Main" className="mr-2 hidden items-center gap-1 md:flex">
             {NAV.map((item) => (
               <NavLink
                 key={item.to}
@@ -154,8 +156,6 @@ export function PublicLayout() {
               </NavLink>
             ))}
           </nav>
-
-          <div className="flex-1" />
 
           {isSignedIn ? (
             <Link to={appPath()} className={buttonVariants({ size: 'sm' })}>

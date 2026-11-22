@@ -2,7 +2,15 @@
  * Public surface of the patients slice. Other features import from here only —
  * never from `./ui/...` or `./model/...` (enforced by `import/no-restricted-paths`).
  */
-export { patientsApi, type CareTeam, type ClinicalUpdate, type PatientListParams } from './api/patients-api';
+export {
+  patientsApi,
+  type CareTeamDoctor,
+  type CareTeamMember,
+  type CareTeamProfile,
+  type ClinicalUpdate,
+  type PatientListParams,
+  type PatientWithName,
+} from './api/patients-api';
 export {
   careLogsApi,
   medicalRecordsApi,

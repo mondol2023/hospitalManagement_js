@@ -202,6 +202,74 @@ describe('PatientDetailPage consultation entry point', () => {
   });
 });
 
+// Regression: the panel read `assignedNurses` off a response that carried only ids,
+// so `data.assignedNurses.length` threw and took the whole chart down. The route now
+// answers `{ primaryDoctor, nurses }` with names.
+describe('PatientDetailPage care team panel', () => {
+  const patient = {
+    id: 'p1',
+    user: { id: 'u1', name: 'Ada Lovelace' },
+    medicalRecordNumber: 'MRN-1',
+    age: 36,
+    gender: 'female',
+    allergies: [],
+    chronicConditions: [],
+    emergencyContact: { name: 'Charles', relationship: 'Spouse', phone: '555-0100' },
+    assignedNurses: [],
+    isAdmitted: false,
+  };
+
+  function renderChartWithTeam(team: unknown) {
+    useAuthStore.getState().setSession({
+      user: {
+        id: 'u-me',
+        name: 'Dr Imani Khan',
+        email: 'imani@example.com',
+        role: 'doctor',
+        isActive: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      } as never,
+      accessToken: 'a',
+      refreshToken: 'r',
+    });
+    client.get.mockImplementation(async (url: string) => {
+      if (url === '/patients/p1') return patient;
+      if (url === '/patients/p1/care-team') return team;
+      return null;
+    });
+    client.page.mockResolvedValue(page([]));
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/patients/:patientId" element={<PatientDetailPage />} />
+      </Routes>,
+      { route: '/patients/p1' }
+    );
+  }
+
+  it('lists the primary doctor and the nurses by name', async () => {
+    renderChartWithTeam({
+      primaryDoctor: { id: 'd1', name: 'Dr. Okafor', specialization: 'cardiology' },
+      nurses: [
+        { id: 'n1', name: 'Nurse Bello' },
+        { id: 'n2', name: 'Nurse Chen' },
+      ],
+    });
+
+    expect(await screen.findByText('Dr. Okafor')).toBeInTheDocument();
+    expect(screen.getByText('Nurse Bello')).toBeInTheDocument();
+    expect(screen.getByText('Nurse Chen')).toBeInTheDocument();
+  });
+
+  it('says so when nobody has been assigned, instead of crashing', async () => {
+    renderChartWithTeam({ primaryDoctor: null, nurses: [] });
+
+    expect(await screen.findByText('Not assigned')).toBeInTheDocument();
+    expect(screen.getByText('No nurses assigned')).toBeInTheDocument();
+  });
+});
+
 describe('VitalsPanel', () => {
   it('reads the backend field names for heart rate and blood pressure', async () => {
     client.get.mockResolvedValue({

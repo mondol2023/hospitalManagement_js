@@ -41,6 +41,14 @@ export interface User {
   updatedAt: ISODateString;
 }
 
+/**
+ * What a populated `user` ref carries on the staff-facing lists (MRN lookup,
+ * arrivals, outstanding bills): a name and a photo, never an email or a phone.
+ * The backend populates `name profilePic` for these, so a row can show who it
+ * is about without a second request per row.
+ */
+export type UserSummary = Pick<User, 'id' | 'name' | 'profilePic'>;
+
 export interface AuthSession {
   user: User;
   accessToken: string;
@@ -85,6 +93,15 @@ export interface Patient {
   createdAt: ISODateString;
   updatedAt: ISODateString;
 }
+
+/**
+ * A patient as a list row names them: the MRN, and the user's name inside it.
+ * `user` stays a `Ref` (and nullable) so a patient whose user record was
+ * removed renders as "Name not on record" instead of crashing the row.
+ */
+export type PatientSummary = Pick<Patient, 'id' | 'medicalRecordNumber'> & {
+  user: Ref<UserSummary> | null;
+};
 
 // ── Appointments ────────────────────────────────────────────────────────────
 
@@ -222,6 +239,7 @@ export interface Bill {
   status: BillStatus;
   payments: Payment[];
   refunds?: Refund[];
+  dueDate?: ISODateString;
   notes?: string;
   createdAt: ISODateString;
   updatedAt: ISODateString;

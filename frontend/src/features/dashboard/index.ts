@@ -20,5 +20,3 @@ export {
   useWardOccupancy,
 } from './model/use-analytics';
 export { DashboardPage } from './ui/DashboardPage';
-export { METRIC_LABELS, MetricGrid } from './ui/MetricGrid';
-export { OccupancyPanel } from './ui/OccupancyPanel';

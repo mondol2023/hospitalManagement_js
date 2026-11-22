@@ -53,10 +53,15 @@ export function useBed(id: string | undefined) {
   });
 }
 
-export function useAvailableBeds(params?: { ward?: string; type?: BedType }) {
+export function useAvailableBeds(
+  params?: { ward?: string; type?: BedType },
+  /** Off by default; the front desk keeps a free-bed count on screen all shift. */
+  options: { refetchInterval?: number } = {}
+) {
   return useQuery({
     queryKey: queryKeys.beds.available(params),
     queryFn: () => bedsApi.available(params),
+    refetchInterval: options.refetchInterval,
   });
 }
 

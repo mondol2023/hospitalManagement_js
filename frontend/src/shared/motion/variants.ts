@@ -151,6 +151,21 @@ export const collapsible: Variants = {
   visible: { height: 'auto', opacity: 1, transition: TRANSITION.enter },
 };
 
+/**
+ * Marks which element a deep link meant: an apricot wash that fades out once
+ * over 1.2 s. It animates the opacity of an overlay rather than a background
+ * colour, because the apricot is a theme token and opacity is the one property
+ * that keeps the animation compositor-only and identical in both themes. It
+ * never repeats; the only loop in the product is `alertPulse`.
+ */
+export const highlightFlash: Variants = {
+  rest: { opacity: 0 },
+  flash: {
+    opacity: [0.7, 0],
+    transition: { duration: 1.2, ease: 'easeOut' },
+  },
+};
+
 /** Toasts slide in from the edge they are anchored to. */
 export const toastItem: Variants = {
   hidden: { opacity: 0, x: 24, scale: 0.97 },

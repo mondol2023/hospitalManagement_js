@@ -1,16 +1,21 @@
 import { Plus } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
+import { ApiError } from '@/shared/api/envelope';
 import { cn } from '@/shared/lib/cn';
 import { useConnectionState } from '@/shared/realtime/useSocketEvent';
 import type { Conversation, ConversationType } from '@/shared/types/domain';
-import { Badge, Button, Card, PageHeader, Select } from '@/shared/ui';
+import { Badge, Button, Card, PageHeader, Select, toast } from '@/shared/ui';
 import { selectUser, useAuthStore } from '@/features/auth';
 
 import { useChatStream, useConversation, useInbox } from '../model/use-chat';
 import { ConversationList } from './ConversationList';
 import { NewThreadModal } from './NewThreadModal';
 import { ThreadView } from './ThreadView';
+
+/** Query param holding the open conversation's id. Other pages link with it. */
+const THREAD_PARAM = 'c';
 
 const TYPE_FILTERS: Array<{ value: '' | ConversationType; label: string }> = [
   { value: '', label: 'All conversations' },
@@ -32,8 +37,27 @@ const TYPE_FILTERS: Array<{ value: '' | ConversationType; label: string }> = [
  */
 export function MessagesPage() {
   const [type, setType] = useState<'' | ConversationType>('');
-  const [selectedId, setSelectedId] = useState<string | undefined>();
   const [newThreadOpen, setNewThreadOpen] = useState(false);
+
+  // The open thread lives in the URL (`?c=<conversationId>`), so a link from
+  // another page can land on it and a refresh keeps it. Other params are kept.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedId = searchParams.get(THREAD_PARAM) || undefined;
+
+  const select = useCallback(
+    (id: string | undefined, { replace = false }: { replace?: boolean } = {}) => {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          if (id) next.set(THREAD_PARAM, id);
+          else next.delete(THREAD_PARAM);
+          return next;
+        },
+        { replace }
+      );
+    },
+    [setSearchParams]
+  );
 
   const viewer = useAuthStore(selectUser);
   const connection = useConnectionState();
@@ -48,9 +72,23 @@ export function MessagesPage() {
   const detail = useConversation(fromInbox ? undefined : selectedId);
   const selected = fromInbox ?? detail.data;
 
+  // An id the reader is not a member of (or that does not exist) comes back
+  // 403/404. Show the inbox instead, say so once, and drop the dead param so a
+  // refresh does not repeat it. `replace` keeps the dead URL out of Back.
+  const unavailable =
+    !fromInbox &&
+    detail.error instanceof ApiError &&
+    (detail.error.status === 404 || detail.error.status === 403);
+
+  useEffect(() => {
+    if (!unavailable) return;
+    toast.error("That conversation isn't available.");
+    select(undefined, { replace: true });
+  }, [unavailable, selectedId, select]);
+
   useChatStream(selectedId);
 
-  const open = (conversation: Conversation) => setSelectedId(conversation.id);
+  const open = (conversation: Conversation) => select(conversation.id);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -109,7 +147,7 @@ export function MessagesPage() {
         >
           {selectedId && (
             <div className="border-b border-line px-4 py-2 md:hidden">
-              <Button size="sm" variant="ghost" onClick={() => setSelectedId(undefined)}>
+              <Button size="sm" variant="ghost" onClick={() => select(undefined)}>
                 ← All conversations
               </Button>
             </div>
@@ -123,7 +161,7 @@ export function MessagesPage() {
       <NewThreadModal
         open={newThreadOpen}
         onOpenChange={setNewThreadOpen}
-        onCreated={(conversation) => setSelectedId(conversation.id)}
+        onCreated={(conversation) => select(conversation.id)}
       />
     </div>
   );

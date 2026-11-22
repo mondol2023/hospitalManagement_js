@@ -116,9 +116,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: appPath('profile'), label: 'My profile', icon: UserCircle, allow: ALL_ROLES, placement: 'account' },
   { to: appPath('security'), label: 'Security', icon: ShieldCheck, allow: ALL_ROLES, placement: 'account' },
 
-  // ── Planned: patient (phase 4) ─────────────────────────────────────────────
-  { to: appPath('my-health'), label: 'My health', icon: HeartPulse, allow: [ROLES.PATIENT], planned: true },
-  { to: appPath('my-care-team'), label: 'My care team', icon: UsersRound, allow: [ROLES.PATIENT], planned: true },
+  // ── Patient (phase 4c) ─────────────────────────────────────────────────────
+  { to: appPath('my-health'), label: 'My health', icon: HeartPulse, allow: [ROLES.PATIENT] },
+  { to: appPath('my-care-team'), label: 'My care team', icon: UsersRound, allow: [ROLES.PATIENT] },
 
   // ── Doctor (phase 4b) ──────────────────────────────────────────────────────
   // Follow-ups is the one page admin roles share: they read every doctor's list
@@ -137,16 +137,11 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: appPath('handover'), label: 'Handover', icon: ClipboardList, allow: [ROLES.NURSE] },
   { to: appPath('workload'), label: 'Workload', icon: BarChart3, allow: [ROLES.NURSE] },
 
-  // ── Planned: front desk, pharmacy, finance (phase 4) ───────────────────────
-  {
-    to: appPath('front-desk'),
-    label: 'Front desk',
-    icon: Warehouse,
-    allow: [ROLES.RECEPTIONIST, ...ADMIN_ROLES],
-    planned: true,
-  },
-  { to: appPath('pharmacy/expiry'), label: 'Expiry', icon: PillBottle, allow: INVENTORY_ROLES, planned: true },
-  { to: appPath('billing/revenue'), label: 'Revenue', icon: TrendingUp, allow: FINANCE_ROLES, planned: true },
+  { to: appPath('front-desk'), label: 'Front desk', icon: Warehouse, allow: [ROLES.RECEPTIONIST, ...ADMIN_ROLES] },
+
+  { to: appPath('pharmacy/expiry'), label: 'Expiry', icon: PillBottle, allow: INVENTORY_ROLES },
+
+  { to: appPath('billing/revenue'), label: 'Revenue', icon: TrendingUp, allow: FINANCE_ROLES },
 
   // ── Planned: admin (phase 5) ───────────────────────────────────────────────
   { to: appPath('admin/users'), label: 'Users', icon: UserCog, allow: ADMIN_ROLES, planned: true },

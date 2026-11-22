@@ -28,10 +28,10 @@ export function renderWithProviders(
   };
 }
 
-export function renderHookWithClient<T>(
-  hook: () => T,
+export function renderHookWithClient<T, P = undefined>(
+  hook: (props: P) => T,
   { client = makeQueryClient(), ...options }: { client?: QueryClient } & Omit<
-    RenderHookOptions<unknown>,
+    RenderHookOptions<P>,
     'wrapper'
   > = {}
 ) {

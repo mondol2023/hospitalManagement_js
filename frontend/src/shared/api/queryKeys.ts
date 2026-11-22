@@ -29,6 +29,8 @@ export const queryKeys = {
     detail: (id: string) => ['patients', 'detail', id] as const,
     clinical: (id: string) => ['patients', 'detail', id, 'clinical'] as const,
     careTeam: (id: string) => ['patients', 'detail', id, 'care-team'] as const,
+    /** `mrn` is expected normalised (trimmed, upper case) so one patient has one entry. */
+    byMrn: (mrn: string) => ['patients', 'mrn', mrn] as const,
     me: ['patients', 'me'] as const,
     caseload: (params?: Params) => ['patients', 'caseload', params ?? {}] as const,
   },
@@ -117,6 +119,21 @@ export const queryKeys = {
     conversation: (id: string) => ['chat', 'conversation', id] as const,
     messages: (id: string) => ['chat', 'conversation', id, 'messages'] as const,
     unread: ['chat', 'unread'] as const,
+  },
+
+  /**
+   * What the signed-in patient sees. Separate from `patients`, `appointments`
+   * and `bills` on purpose: those hold staff-scoped lists, and a patient's
+   * "upcoming" or "open bills" is a different query on the same route.
+   */
+  patientPortal: {
+    all: ['patient-portal'] as const,
+    me: ['patient-portal', 'me'] as const,
+    careTeam: ['patient-portal', 'care-team'] as const,
+    upcoming: (limit: number) => ['patient-portal', 'upcoming', limit] as const,
+    latestVitals: ['patient-portal', 'latest-vitals'] as const,
+    journey: ['patient-portal', 'journey'] as const,
+    bills: (params?: Params) => ['patient-portal', 'bills', params ?? {}] as const,
   },
 
   /** Own profile by role — `me` is already taken by patients, so keyed by role. */

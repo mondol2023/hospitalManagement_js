@@ -66,7 +66,9 @@ describe('route split', () => {
 
   it('shows the public front door at / without a session', async () => {
     renderAt('/');
-    expect(await screen.findByRole('heading', { name: /find your way to care/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: /find your way to care/i })
+    ).toBeInTheDocument();
   });
 
   it('sends an anonymous visitor from /app to the sign-in form', async () => {
@@ -76,7 +78,9 @@ describe('route split', () => {
 
   it('answers an unknown public URL with the public not-found page', async () => {
     renderAt('/no-such-page');
-    expect(await screen.findByRole('heading', { name: /we can.t find that page/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: /we can.t find that page/i })
+    ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /back to home/i })).toHaveAttribute('href', '/');
   });
 
@@ -104,7 +108,9 @@ describe('route split', () => {
 
   it('says so when a service does not exist', async () => {
     renderAt('/services/no-such-service');
-    expect(await screen.findByRole('heading', { name: /we can.t find that service/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: /we can.t find that service/i })
+    ).toBeInTheDocument();
   });
 
   it('does not leave guards waiting once bootstrap has finished', () => {
@@ -149,7 +155,9 @@ describe('route split', () => {
       async (role) => {
         signIn(role);
         renderAt('/app/security');
-        expect(await screen.findByRole('heading', { level: 1, name: /^security$/i })).toBeInTheDocument();
+        expect(
+          await screen.findByRole('heading', { level: 1, name: /^security$/i })
+        ).toBeInTheDocument();
       }
     );
 
@@ -164,7 +172,9 @@ describe('route split', () => {
     it('opens the profile page', async () => {
       signIn('admin');
       renderAt('/app/profile');
-      expect(await screen.findByRole('heading', { level: 1, name: /my profile/i })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('heading', { level: 1, name: /my profile/i })
+      ).toBeInTheDocument();
       expect(await screen.findByText('Office manager')).toBeInTheDocument();
     });
 
@@ -189,6 +199,67 @@ describe('route split', () => {
       ])('keeps %s closed to a %s', async (path, role) => {
         signIn(role);
         renderAt(path);
+        expect(await screen.findByText(/do not have access to this area/i)).toBeInTheDocument();
+      });
+    });
+
+    describe('patient pages', () => {
+      it('opens the care journey for a patient', async () => {
+        signIn('patient');
+        renderAt('/app/my-health');
+        expect(
+          await screen.findByRole('heading', { level: 1, name: /^my health$/i })
+        ).toBeInTheDocument();
+      });
+
+      it.each<[Role]>([['admin'], ['manager'], ['doctor'], ['nurse'], ['receptionist']])(
+        'keeps the care journey closed to a %s',
+        async (role) => {
+          signIn(role);
+          renderAt('/app/my-health');
+          expect(await screen.findByText(/do not have access to this area/i)).toBeInTheDocument();
+        }
+      );
+
+      it('opens the care team for a patient', async () => {
+        signIn('patient');
+        renderAt('/app/my-care-team');
+        expect(
+          await screen.findByRole('heading', { level: 1, name: /^my care team$/i })
+        ).toBeInTheDocument();
+      });
+
+      it.each<[Role]>([['admin'], ['manager'], ['doctor'], ['nurse'], ['receptionist']])(
+        'keeps the care team closed to a %s',
+        async (role) => {
+          signIn(role);
+          renderAt('/app/my-care-team');
+          expect(await screen.findByText(/do not have access to this area/i)).toBeInTheDocument();
+        }
+      );
+    });
+
+    describe('billing', () => {
+      it('gives a patient their own bills, not the staff ledger', async () => {
+        signIn('patient');
+        renderAt('/app/billing');
+        expect(await screen.findByRole('tab', { name: /^to pay$/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /raise invoice/i })).not.toBeInTheDocument();
+      });
+
+      it.each<[Role]>([['receptionist'], ['admin'], ['manager']])(
+        'keeps the staff ledger for a %s',
+        async (role) => {
+          signIn(role);
+          renderAt('/app/billing');
+          expect(await screen.findByRole('button', { name: /raise invoice/i })).toBeInTheDocument();
+          expect(screen.queryByRole('tab', { name: /^to pay$/i })).not.toBeInTheDocument();
+        }
+      );
+
+      it.each<[Role]>([['doctor'], ['nurse']])('keeps billing closed to a %s', async (role) => {
+        signIn(role);
+        renderAt('/app/billing');
         expect(await screen.findByText(/do not have access to this area/i)).toBeInTheDocument();
       });
     });
@@ -227,6 +298,72 @@ describe('route split', () => {
         renderAt(path);
         expect(await screen.findByText(/do not have access to this area/i)).toBeInTheDocument();
       });
+    });
+
+    describe('front desk', () => {
+      it.each<[Role]>([['receptionist'], ['admin'], ['manager']])(
+        'opens /app/front-desk for a %s',
+        async (role) => {
+          signIn(role);
+          renderAt('/app/front-desk');
+          expect(
+            await screen.findByRole('heading', { level: 1, name: /^front desk$/i })
+          ).toBeInTheDocument();
+        }
+      );
+
+      it.each<[Role]>([['nurse'], ['doctor'], ['patient'], ['accountant'], ['pharmacist']])(
+        'keeps /app/front-desk closed to a %s',
+        async (role) => {
+          signIn(role);
+          renderAt('/app/front-desk');
+          expect(await screen.findByText(/do not have access to this area/i)).toBeInTheDocument();
+        }
+      );
+    });
+
+    describe('expiry', () => {
+      it.each<[Role]>([['pharmacist'], ['admin'], ['manager']])(
+        'opens /app/pharmacy/expiry for a %s',
+        async (role) => {
+          signIn(role);
+          renderAt('/app/pharmacy/expiry');
+          expect(
+            await screen.findByRole('heading', { level: 1, name: /^expiry$/i })
+          ).toBeInTheDocument();
+        }
+      );
+
+      it.each<[Role]>([['nurse'], ['doctor'], ['patient'], ['receptionist'], ['accountant']])(
+        'keeps /app/pharmacy/expiry closed to a %s',
+        async (role) => {
+          signIn(role);
+          renderAt('/app/pharmacy/expiry');
+          expect(await screen.findByText(/do not have access to this area/i)).toBeInTheDocument();
+        }
+      );
+    });
+
+    describe('revenue', () => {
+      it.each<[Role]>([['accountant'], ['admin'], ['manager']])(
+        'opens /app/billing/revenue for a %s',
+        async (role) => {
+          signIn(role);
+          renderAt('/app/billing/revenue');
+          expect(
+            await screen.findByRole('heading', { level: 1, name: /^revenue$/i })
+          ).toBeInTheDocument();
+        }
+      );
+
+      it.each<[Role]>([['nurse'], ['doctor'], ['patient'], ['receptionist'], ['pharmacist']])(
+        'keeps /app/billing/revenue closed to a %s',
+        async (role) => {
+          signIn(role);
+          renderAt('/app/billing/revenue');
+          expect(await screen.findByText(/do not have access to this area/i)).toBeInTheDocument();
+        }
+      );
     });
 
     it('sends a signed-out visitor from /app/profile to sign-in', async () => {

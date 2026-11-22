@@ -56,7 +56,7 @@ The backend is in this repo, so small changes are cheaper than workarounds in th
 | **4a Nurse** | Nurse dashboard, `/app/ward`, `/app/handover`, `/app/workload` | 1st (chosen) | B1, B2, B3, B6 |
 | **4b Doctor** | Doctor dashboard, `/app/schedule`, `/app/records`, `/app/follow-ups`, chart additions (latest vitals, attachments) | 2nd | B4 |
 | **4c Patient** | Patient dashboard, `/app/my-health` care journey, `/app/my-care-team` | 3rd | B5 |
-| **4d Front desk, pharmacy, finance, admin** | `/app/front-desk`, `/app/pharmacy/expiry`, `/app/billing/revenue`, their three dashboards, and the admin/manager live board | 4th | none found |
+| **4d Front desk, pharmacy, finance, admin** | `/app/front-desk`, `/app/pharmacy/expiry`, `/app/billing/revenue`, their three dashboards, and the admin/manager live board | 4th | B13–B17 (see the 4d spec) |
 
 Each slice goes through design, spec, plan, build with tests, then review.
 
@@ -195,6 +195,8 @@ Each step ends with the suite green, so the slice can stop at any step without l
 - **Data:** `/patients/me`, `/medical-records/patient/me` (the validator accepts `me`), `/appointments`, `/bills/patient/:id`.
 
 ## 9. Slice 4d — Front desk, pharmacy, finance, admin (outline)
+
+> Detailed design: [docs/superpowers/specs/2026-11-22-frontend-4d-operations-design.md](../docs/superpowers/specs/2026-11-22-frontend-4d-operations-design.md). It corrects this outline: the MRN visibility check passes any staff member, and withdrawal needs B17 to change stock at all.
 
 - **`/app/front-desk`** (receptionist and admin roles): MRN lookup via `/patients/mrn/:mrn` (staff-only, with a per-patient visibility check), available beds via `/beds/available`.
 - **`/app/pharmacy/expiry`** (inventory roles): `/medicines/expiring` and `/medicines/expired`, with `POST /medicines/withdraw-expired`. Withdrawal changes stock, so it needs a confirm step.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { ROLES } from '@/shared/lib/roles';
+import { ROLES, type Role } from '@/shared/lib/roles';
 import { APP_ROOT } from '@/shared/lib/routes';
 
 import { accountItemsFor, NAV_ITEMS, navItemsFor } from './navigation';
@@ -114,6 +114,25 @@ describe('navigation', () => {
     });
   });
 
+  describe.each(['/app/my-health', '/app/my-care-team'])('patient page %s (phase 4c)', (path) => {
+    it('is built, and open to patients only', () => {
+      const item = NAV_ITEMS.find((entry) => entry.to === path);
+      expect(item).toBeDefined();
+      expect(item?.planned).toBeFalsy();
+      expect(item?.allow).toEqual([ROLES.PATIENT]);
+    });
+
+    it('is in a patient’s sidebar and no one else’s', () => {
+      expect(navItemsFor(ROLES.PATIENT).map((item) => item.to)).toContain(path);
+      for (const role of Object.values(ROLES).filter((r) => r !== ROLES.PATIENT)) {
+        expect(
+          navItemsFor(role).map((item) => item.to),
+          role
+        ).not.toContain(path);
+      }
+    });
+  });
+
   describe('nurse pages (phase 4a)', () => {
     const NURSE_PAGES = [
       ['/app/ward', 'My ward'],
@@ -141,6 +160,66 @@ describe('navigation', () => {
       for (const role of Object.values(ROLES).filter((r) => r !== ROLES.NURSE)) {
         const paths = navItemsFor(role).map((item) => item.to);
         for (const [path] of NURSE_PAGES) expect(paths, `${path} for ${role}`).not.toContain(path);
+      }
+    });
+  });
+
+  describe('front desk (phase 4d)', () => {
+    const FRONT_DESK = '/app/front-desk';
+    const ALLOWED: readonly Role[] = [ROLES.RECEPTIONIST, ROLES.ADMIN, ROLES.MANAGER];
+
+    it('is built, and open to reception and the admin roles only', () => {
+      const item = NAV_ITEMS.find((entry) => entry.to === FRONT_DESK);
+      expect(item).toBeDefined();
+      expect(item?.planned).toBeFalsy();
+      expect([...(item?.allow ?? [])].sort()).toEqual([...ALLOWED].sort());
+    });
+
+    it('is in the sidebar of exactly those roles', () => {
+      for (const role of Object.values(ROLES)) {
+        const paths = navItemsFor(role).map((item) => item.to);
+        if (ALLOWED.includes(role)) expect(paths, role).toContain(FRONT_DESK);
+        else expect(paths, role).not.toContain(FRONT_DESK);
+      }
+    });
+  });
+
+  describe('revenue (phase 4d)', () => {
+    const REVENUE = '/app/billing/revenue';
+    const ALLOWED: readonly Role[] = [ROLES.ACCOUNTANT, ROLES.ADMIN, ROLES.MANAGER];
+
+    it('is built, and open to the finance roles only', () => {
+      const item = NAV_ITEMS.find((entry) => entry.to === REVENUE);
+      expect(item).toBeDefined();
+      expect(item?.planned).toBeFalsy();
+      expect([...(item?.allow ?? [])].sort()).toEqual([...ALLOWED].sort());
+    });
+
+    it('is in the sidebar of exactly those roles', () => {
+      for (const role of Object.values(ROLES)) {
+        const paths = navItemsFor(role).map((item) => item.to);
+        if (ALLOWED.includes(role)) expect(paths, role).toContain(REVENUE);
+        else expect(paths, role).not.toContain(REVENUE);
+      }
+    });
+  });
+
+  describe('expiry (phase 4d)', () => {
+    const EXPIRY = '/app/pharmacy/expiry';
+    const ALLOWED: readonly Role[] = [ROLES.PHARMACIST, ROLES.ADMIN, ROLES.MANAGER];
+
+    it('is built, and open to the inventory roles only', () => {
+      const item = NAV_ITEMS.find((entry) => entry.to === EXPIRY);
+      expect(item).toBeDefined();
+      expect(item?.planned).toBeFalsy();
+      expect([...(item?.allow ?? [])].sort()).toEqual([...ALLOWED].sort());
+    });
+
+    it('is in the sidebar of exactly those roles', () => {
+      for (const role of Object.values(ROLES)) {
+        const paths = navItemsFor(role).map((item) => item.to);
+        if (ALLOWED.includes(role)) expect(paths, role).toContain(EXPIRY);
+        else expect(paths, role).not.toContain(EXPIRY);
       }
     });
   });

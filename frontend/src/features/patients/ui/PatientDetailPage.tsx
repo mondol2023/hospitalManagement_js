@@ -464,9 +464,9 @@ function CareTeamPanel({ patientId }: { patientId: string }) {
             </div>
             <div>
               <span className="label-eyebrow">Nurses</span>
-              {data?.assignedNurses.length ? (
+              {data?.nurses.length ? (
                 <ul className="mt-1 flex flex-col gap-1">
-                  {data.assignedNurses.map((nurse) => (
+                  {data.nurses.map((nurse) => (
                     <li key={nurse.id}>{nurse.name}</li>
                   ))}
                 </ul>

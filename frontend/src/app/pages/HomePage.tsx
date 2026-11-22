@@ -11,6 +11,7 @@ import { BRAND_NAME } from '../layout/brand';
 
 import { Container, NextLink } from './public/blocks';
 import { DepartmentMarquee } from './public/DepartmentMarquee';
+import { FacilitiesSection, FindUsSection, TestimonialsSection } from './public/HomeSections';
 import { WayfindingHero } from './public/WayfindingHero';
 
 /**
@@ -45,8 +46,8 @@ const URGENT = {
 /**
  * `/`. A signed-in user goes straight to their dashboard; a visitor sees the
  * landing page: a route line that draws itself from "You are here" to the main
- * departments, then the four things people come for, every department, and what
- * a visit looks like.
+ * departments, then the four things people come for, every department, what a
+ * visit looks like, the facilities, what patients say and how to find the door.
  */
 export function HomePage() {
   const isSignedIn = useAuthStore((state) => Boolean(state.accessToken && state.user));
@@ -165,6 +166,10 @@ export function HomePage() {
           </p>
         </Reveal>
       </Container>
+
+      <FacilitiesSection />
+      <TestimonialsSection />
+      <FindUsSection />
 
       <Container className="pb-16 pt-6 sm:pb-24">
         <Reveal as="section" className="rounded-card bg-warm-soft px-6 py-8 sm:px-10 sm:py-10">

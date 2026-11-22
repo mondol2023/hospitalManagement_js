@@ -1,6 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
-import { STAGGER, staggerDelay, staggerRow } from './variants';
+import { highlightFlash, STAGGER, staggerDelay, staggerRow } from './variants';
+
+describe('highlightFlash', () => {
+  // It marks which event a deep link meant, once. A loop would read as an alert,
+  // and the only looping motion in the product is `alertPulse` on emergencies.
+  it('fades once from visible to gone, over 1.2 seconds', () => {
+    const flash = highlightFlash.flash as {
+      opacity: number[];
+      transition: Record<string, unknown>;
+    };
+
+    expect(flash.opacity[0]).toBeGreaterThan(0);
+    expect(flash.opacity.at(-1)).toBe(0);
+    expect(flash.transition.duration).toBe(1.2);
+    expect(flash.transition).not.toHaveProperty('repeat');
+  });
+
+  it('rests invisible and animates opacity only', () => {
+    expect(highlightFlash.rest).toEqual({ opacity: 0 });
+    expect(Object.keys(highlightFlash.flash as object).sort()).toEqual(['opacity', 'transition']);
+  });
+});
 
 type Resolve = (index: number) => { opacity: number; y: number; transition: { delay: number } };
 

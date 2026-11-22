@@ -10,6 +10,7 @@ import {
   type BillTerms,
   type CreateBillInput,
   type LineItemInput,
+  type OutstandingParams,
   type PaymentInput,
   type RefundInput,
   type UpdateBillInput,
@@ -64,7 +65,7 @@ export function usePatientBills(patientId: string | undefined) {
   });
 }
 
-export function useOutstandingBills(params?: { page?: number; limit?: number }) {
+export function useOutstandingBills(params?: OutstandingParams) {
   return useQuery({
     queryKey: queryKeys.bills.outstanding(params),
     queryFn: () => billingApi.outstanding(params),
@@ -76,6 +77,8 @@ export function useRevenue(params?: { from?: string; to?: string }) {
   return useQuery({
     queryKey: queryKeys.bills.revenue(params),
     queryFn: () => billingApi.revenue(params),
+    // Picking another range keeps the old figures up, dimmed, until the new land.
+    placeholderData: (previous) => previous,
   });
 }
 

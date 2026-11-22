@@ -313,6 +313,95 @@ export const FAQS: readonly Faq[] = [
   },
 ];
 
+export interface Facility {
+  id: string;
+  name: string;
+  /** One plain sentence. No counts, accreditations or equipment makes: none are confirmed. */
+  detail: string;
+}
+
+/**
+ * What a visitor can expect to find on site. TODO: administration to confirm the
+ * list, and to add anything the hospital is proud of (and can evidence). Written
+ * without numbers (bed counts, theatre counts, opening hours) on purpose.
+ */
+export const FACILITIES: readonly Facility[] = [
+  {
+    id: 'emergency',
+    name: 'Emergency department',
+    detail: 'Staffed for sudden illness and injury, with its own entrance.',
+  },
+  {
+    id: 'wards',
+    name: 'Inpatient wards',
+    detail: 'Beds for patients who stay, with nursing care around the clock.',
+  },
+  {
+    id: 'theatres',
+    name: 'Operating theatres',
+    detail: 'For planned and urgent surgery, with recovery close by.',
+  },
+  {
+    id: 'maternity',
+    name: 'Maternity unit',
+    detail: 'Antenatal care, birth and the first days afterwards.',
+  },
+  {
+    id: 'imaging',
+    name: 'Imaging and laboratory',
+    detail: 'X-ray, ultrasound and tests, so results reach your doctor quickly.',
+  },
+  {
+    id: 'pharmacy',
+    name: 'Pharmacy',
+    detail: 'Prescribed medicines and advice on taking them, before you go home.',
+  },
+  {
+    id: 'outpatients',
+    name: 'Outpatient clinics',
+    detail: 'Appointments with a doctor when you do not need to stay.',
+  },
+  {
+    id: 'access',
+    name: 'Accessible throughout',
+    detail: 'Ask the front desk for step-free routes, wheelchairs or help with language and hearing.',
+  },
+];
+
+export interface Testimonial {
+  id: string;
+  quote: string;
+  /** Who said it, as they agreed to be named ("A patient, after a day procedure"). */
+  attribution: string;
+}
+
+/**
+ * Patient feedback. TODO: replace every entry with a real, consented quote. The
+ * entries below are SAMPLE TEXT so the section can be designed and tested: while
+ * `TESTIMONIALS_ARE_SAMPLES` is true the page says so, in the page, next to them.
+ * Never publish a quote nobody said.
+ */
+export const TESTIMONIALS: readonly Testimonial[] = [
+  {
+    id: 'directions',
+    quote: 'I always knew where to go next, and someone was there to ask when I did not.',
+    attribution: 'Sample: a patient, after an outpatient visit',
+  },
+  {
+    id: 'explained',
+    quote: 'Every step was explained before it happened. I never felt rushed.',
+    attribution: 'Sample: a patient, after a stay on a ward',
+  },
+  {
+    id: 'family',
+    quote: 'Our family was kept informed, and I could message the team without calling.',
+    attribution: 'Sample: a relative of a patient',
+  },
+];
+
+/** Flip to `false` only once every entry in `TESTIMONIALS` is a real, consented quote. */
+export const TESTIMONIALS_ARE_SAMPLES = true;
+
 /**
  * Privacy and terms are drafts until the hospital's legal reviewer signs them
  * off. While this is `false` both pages say so on the page itself, so a draft

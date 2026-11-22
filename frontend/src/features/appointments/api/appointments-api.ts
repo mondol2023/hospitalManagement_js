@@ -1,5 +1,12 @@
 import { api } from '@/shared/api/client';
-import type { Appointment, AppointmentStatus, ISODateString } from '@/shared/types/domain';
+import type {
+  Appointment,
+  AppointmentStatus,
+  ISODateString,
+  PatientSummary,
+  Ref,
+  UserSummary,
+} from '@/shared/types/domain';
 
 /**
  * `GET /appointments` is deliberately "mine": the backend scopes the list to the
@@ -15,6 +22,11 @@ export interface AppointmentListParams {
   from?: ISODateString;
   to?: ISODateString;
   sort?: string;
+  /**
+   * Visits still ahead: `pending` or `confirmed`, from now on, soonest first.
+   * Overrides `status` and `sort`. "Now" is the server's, not the browser's.
+   */
+  upcoming?: boolean;
 }
 
 export interface BookAppointmentInput {
@@ -37,8 +49,24 @@ export type DayAgendaRow = Pick<
   'id' | 'scheduledAt' | 'endsAt' | 'durationMinutes' | 'status' | 'reason' | 'patient'
 >;
 
+/**
+ * A row of the hospital-wide list a staff member (not a doctor) sees. The
+ * staff branch populates the doctor's name and the patient's MRN with the
+ * user's name inside it, which is what lets the front desk show who is coming
+ * without a request per row. Every populated ref stays nullable: a deleted
+ * doctor or patient must not crash the list.
+ */
+export type ArrivalAppointment = Omit<Appointment, 'patient' | 'doctor'> & {
+  patient: Ref<PatientSummary> | null;
+  doctor: Ref<UserSummary> | null;
+};
+
 export const appointmentsApi = {
   list: (params?: AppointmentListParams) => api.page<Appointment>('/appointments', { params }),
+
+  /** The same route as `list`, typed for the staff branch's populated rows. */
+  arrivals: (params: AppointmentListParams) =>
+    api.page<ArrivalAppointment>('/appointments', { params }),
 
   byPatient: (patientId: string, params?: AppointmentListParams) =>
     api.page<Appointment>(`/appointments/patient/${patientId}`, { params }),

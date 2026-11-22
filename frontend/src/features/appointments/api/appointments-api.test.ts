@@ -39,3 +39,32 @@ describe('appointmentsApi.daySchedule', () => {
     });
   });
 });
+
+describe('appointmentsApi.arrivals', () => {
+  it('reads the staff list with the day, filters and paging', async () => {
+    vi.mocked(api.page).mockResolvedValue({
+      items: [],
+      pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+    });
+
+    await appointmentsApi.arrivals({
+      from: '2026-11-21T18:00:00.000Z',
+      to: '2026-11-22T17:59:59.999Z',
+      status: 'pending',
+      doctor: 'd1',
+      limit: 20,
+      sort: 'scheduledAt',
+    });
+
+    expect(api.page).toHaveBeenCalledWith('/appointments', {
+      params: {
+        from: '2026-11-21T18:00:00.000Z',
+        to: '2026-11-22T17:59:59.999Z',
+        status: 'pending',
+        doctor: 'd1',
+        limit: 20,
+        sort: 'scheduledAt',
+      },
+    });
+  });
+});

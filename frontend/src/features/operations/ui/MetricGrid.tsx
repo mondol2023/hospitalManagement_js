@@ -1,7 +1,6 @@
+import type { MetricName, MetricTile } from '@/features/dashboard';
 import { formatMoney } from '@/shared/lib/money';
 import { Card, CardBody, Metric } from '@/shared/ui';
-
-import type { MetricName, MetricTile } from '../api/analytics-api';
 
 /** The human name for each metric. Groups are laid out in this order. */
 const LABELS: Record<MetricName, string> = {

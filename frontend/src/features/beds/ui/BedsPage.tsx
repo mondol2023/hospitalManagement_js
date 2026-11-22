@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { BedDouble } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { ApiError } from '@/shared/api/envelope';
 import { humanizeEnum } from '@/shared/lib/format';
@@ -57,7 +58,9 @@ const HOUSEKEEPING_OPTIONS: HousekeepingStatus[] = [
 export function BedsPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [ward, setWard] = useState('');
+  // The front desk links here with `?ward=`; after that the select owns it.
+  const [searchParams] = useSearchParams();
+  const [ward, setWard] = useState(() => searchParams.get('ward') ?? '');
   const [status, setStatus] = useState<BedStatus | ''>('');
   const [type, setType] = useState<BedType | ''>('');
 

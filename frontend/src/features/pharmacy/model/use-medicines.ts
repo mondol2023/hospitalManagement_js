@@ -116,10 +116,38 @@ export function useAdjustMedicine() {
   );
 }
 
-/** Pulls every expired batch out of circulation in one sweep. */
+function count(n: number, singular: string, plural: string): string {
+  return `${n} ${n === 1 ? singular : plural}`;
+}
+
+/**
+ * Writes off every expired batch in one sweep.
+ *
+ * The toast reports the server's numbers, not the dialog's: a batch can expire
+ * or be dispensed between "Review" and "Confirm", so the set written off may
+ * differ from the list the user saw. Stock feeds the live board's low-stock
+ * count, so that is refreshed too.
+ */
 export function useWithdrawExpired() {
-  return useMedicineMutation(() => medicinesApi.withdrawExpired(), {
-    success: 'Expired stock withdrawn',
-    failure: 'Could not withdraw expired stock',
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => medicinesApi.withdrawExpired(),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.medicines.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.analytics.live });
+      if (result.withdrawn === 0) {
+        toast.info('Nothing to write off. Those batches were already withdrawn.');
+        return;
+      }
+      toast.success(
+        `Wrote off ${count(result.units, 'unit', 'units')} across ${count(result.withdrawn, 'batch', 'batches')}`
+      );
+    },
+    onError: (error: unknown) => {
+      toast.error(
+        error instanceof ApiError ? error.userMessage : 'Could not withdraw expired stock'
+      );
+    },
   });
 }

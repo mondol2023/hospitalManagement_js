@@ -221,8 +221,15 @@ export const medicalRecordsApi = {
   byPatient: (patientId: string, params?: { page?: number; limit?: number }) =>
     api.page<MedicalRecord>(`/medical-records/patient/${patientId}`, { params }),
 
-  latest: (patientId: string) =>
-    api.get<MedicalRecord | null>(`/medical-records/patient/${patientId}/latest`),
+  /**
+   * The newest record. With `withVitals`, the newest one that actually has a
+   * reading — a visit with no vitals is skipped, not returned empty.
+   */
+  latest: (patientId: string, { withVitals = false }: { withVitals?: boolean } = {}) =>
+    api.get<MedicalRecord | null>(
+      `/medical-records/patient/${patientId}/latest`,
+      withVitals ? { params: { withVitals } } : undefined
+    ),
 
   /**
    * Records the signed-in doctor wrote. Doctor-only: the route is not the

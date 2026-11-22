@@ -8,6 +8,8 @@ import {
   RegisterPage,
   RequireAuth,
   RequireRole,
+  selectRole,
+  useAuthStore,
 } from '@/features/auth';
 import type { Role } from '@/shared/lib/roles';
 import { appPath, PUBLIC_ROUTES } from '@/shared/lib/routes';
@@ -78,6 +80,21 @@ const PatientDetailPage = lazy(async () => {
     default: () => <Chart RecordDrawer={RecordDrawer} ConsultationForm={ConsultationForm} />,
   };
 });
+const CareJourneyPage = lazy(() =>
+  import('@/features/patient-portal').then((m) => ({ default: m.CareJourneyPage }))
+);
+const CareTeamPage = lazy(() =>
+  import('@/features/patient-portal').then((m) => ({ default: m.CareTeamPage }))
+);
+const FrontDeskPage = lazy(() =>
+  import('@/features/operations').then((m) => ({ default: m.FrontDeskPage }))
+);
+const ExpiryPage = lazy(() =>
+  import('@/features/operations').then((m) => ({ default: m.ExpiryPage }))
+);
+const RevenuePage = lazy(() =>
+  import('@/features/operations').then((m) => ({ default: m.RevenuePage }))
+);
 const SchedulePage = lazy(() =>
   import('@/features/doctor').then((m) => ({ default: m.SchedulePage }))
 );
@@ -98,6 +115,21 @@ const BedsPage = lazy(() => import('@/features/beds').then((m) => ({ default: m.
 const BillingPage = lazy(() =>
   import('@/features/billing').then((m) => ({ default: m.BillingPage }))
 );
+const MyBillsView = lazy(() =>
+  import('@/features/patient-portal').then((m) => ({ default: m.MyBillsView }))
+);
+
+/**
+ * `/app/billing` is one URL for two different screens: the staff ledger, and a
+ * patient's own bills. The choice is made here rather than inside `BillingPage`
+ * because `patient-portal` already reads the billing API; if the staff page
+ * imported the patient view back, the two features would import each other.
+ * Which one is drawn is a courtesy — the backend closes `/bills` to patients.
+ */
+function BillingRoute() {
+  const role = useAuthStore(selectRole);
+  return role === 'patient' ? <MyBillsView /> : <BillingPage />;
+}
 const PharmacyPage = lazy(() =>
   import('@/features/pharmacy').then((m) => ({ default: m.PharmacyPage }))
 );
@@ -218,6 +250,18 @@ export function AppRouter() {
               <Route path="patients/:patientId" element={<PatientDetailPage />} />
             </Route>
 
+            <Route element={<RequireRole allow={allowFor(appPath('my-health'))} />}>
+              <Route path="my-health" element={<CareJourneyPage />} />
+            </Route>
+
+            <Route element={<RequireRole allow={allowFor(appPath('my-care-team'))} />}>
+              <Route path="my-care-team" element={<CareTeamPage />} />
+            </Route>
+
+            <Route element={<RequireRole allow={allowFor(appPath('front-desk'))} />}>
+              <Route path="front-desk" element={<FrontDeskPage />} />
+            </Route>
+
             <Route element={<RequireRole allow={allowFor(appPath('schedule'))} />}>
               <Route path="schedule" element={<SchedulePage />} />
             </Route>
@@ -247,11 +291,20 @@ export function AppRouter() {
             </Route>
 
             <Route element={<RequireRole allow={allowFor(appPath('billing'))} />}>
-              <Route path="billing" element={<BillingPage />} />
+              <Route path="billing" element={<BillingRoute />} />
+            </Route>
+
+            {/* A sibling of `billing`, not a child: BillingRoute has no outlet. */}
+            <Route element={<RequireRole allow={allowFor(appPath('billing/revenue'))} />}>
+              <Route path="billing/revenue" element={<RevenuePage />} />
             </Route>
 
             <Route element={<RequireRole allow={allowFor(appPath('pharmacy'))} />}>
               <Route path="pharmacy" element={<PharmacyPage />} />
+            </Route>
+
+            <Route element={<RequireRole allow={allowFor(appPath('pharmacy/expiry'))} />}>
+              <Route path="pharmacy/expiry" element={<ExpiryPage />} />
             </Route>
 
             <Route element={<RequireRole allow={allowFor(appPath('emergencies'))} />}>
