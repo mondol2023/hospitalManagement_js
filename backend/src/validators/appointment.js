@@ -9,6 +9,7 @@ const {
   dateValue,
   optionalText,
   longText,
+  boolish,
 } = require('./common');
 const { APPOINTMENT_STATUS_VALUES } = require('../utils/constants');
 
@@ -27,6 +28,9 @@ const listFilters = {
   to: dateValue.optional(),
 };
 
+/** A patient's own list adds `upcoming`: live visits from now on, soonest first. */
+const patientListFilters = { ...listFilters, upcoming: boolish.optional() };
+
 const book = {
   body: z.object({
     patientId: objectId.optional(),
@@ -37,11 +41,11 @@ const book = {
   }),
 };
 
-const listMine = { query: listQuery(listFilters) };
+const listMine = { query: listQuery(patientListFilters) };
 
 const listForPatient = {
   params: z.object({ patientId: objectIdOrSelf }),
-  query: listQuery(listFilters),
+  query: listQuery(patientListFilters),
 };
 
 const listForDoctor = {
@@ -49,9 +53,10 @@ const listForDoctor = {
   query: listQuery(listFilters),
 };
 
+/** `includeClosed` adds completed and no-show visits; cancelled ones never appear. */
 const daySchedule = {
   params: z.object({ userId: objectId }),
-  query: z.object({ date: dateValue.optional() }),
+  query: z.object({ date: dateValue.optional(), includeClosed: boolish.optional() }),
 };
 
 const byId = { params: idParam() };

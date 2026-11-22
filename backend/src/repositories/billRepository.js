@@ -16,9 +16,27 @@ class BillRepository extends BaseRepository {
     return this.findOne({ invoiceNumber: String(invoiceNumber).toUpperCase().trim() });
   }
 
-  listForPatient(patientId, query = {}) {
+  /**
+   * A patient's bills. `open` means "still owes something" (`unpaid` or
+   * `partially_paid`, which `status` cannot express as it takes one value) and
+   * overrides `status`.
+   *
+   * `excludeDrafts` is for a patient reading their own list: a draft is a bill the
+   * desk has not issued, and asking for `status=draft` must not be a way round that.
+   */
+  listForPatient(patientId, query = {}, { excludeDrafts = false } = {}) {
     const filter = { patient: patientId };
-    if (query.status) filter.status = query.status;
+
+    let status;
+    if (query.open) status = { $in: [BILL_STATUS.UNPAID, BILL_STATUS.PARTIALLY_PAID] };
+    else if (query.status) status = query.status;
+
+    if (excludeDrafts) {
+      if (status === BILL_STATUS.DRAFT) status = { $in: [] };
+      else if (!status) status = { $ne: BILL_STATUS.DRAFT };
+    }
+    if (status) filter.status = status;
+
     return this.paginate(filter, query);
   }
 
@@ -35,7 +53,13 @@ class BillRepository extends BaseRepository {
     return this.paginate(
       { status: { $in: [BILL_STATUS.UNPAID, BILL_STATUS.PARTIALLY_PAID] } },
       query,
-      { populate: { path: 'patient', select: 'medicalRecordNumber user' } }
+      {
+        populate: {
+          path: 'patient',
+          select: 'medicalRecordNumber user',
+          populate: { path: 'user', select: 'name' },
+        },
+      }
     );
   }
 

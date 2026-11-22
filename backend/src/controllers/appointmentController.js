@@ -20,7 +20,9 @@ const listForDoctor = handle.page((req) =>
 );
 
 const daySchedule = handle((req) =>
-  appointmentService.daySchedule(req.params.userId, req.query.date)
+  appointmentService.daySchedule(req.params.userId, req.query.date, req.user, {
+    includeClosed: req.query.includeClosed,
+  })
 );
 
 const getById = handle((req) => appointmentService.getById(req.params.id, req.user));

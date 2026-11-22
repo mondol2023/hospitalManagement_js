@@ -114,7 +114,11 @@ class AppointmentService {
     return this.appointments.paginate(this._staffFilter(query), query, {
       populate: [
         { path: 'doctor', select: 'name' },
-        { path: 'patient', select: 'medicalRecordNumber user' },
+        {
+          path: 'patient',
+          select: 'medicalRecordNumber user',
+          populate: { path: 'user', select: 'name' },
+        },
       ],
     });
   }
@@ -128,11 +132,22 @@ class AppointmentService {
     return this.appointments.listForDoctor(doctorUserId, query);
   }
 
-  /** The doctor's day view — used by the consultation screen. */
-  daySchedule(doctorUserId, date) {
+  /**
+   * The doctor's day view — "My day", and the front desk's view of a doctor.
+   *
+   * Rows carry patient names, so this is narrower than "any staff": the doctor
+   * themselves, administrators and receptionists (D3). Another doctor, a nurse,
+   * a pharmacist or an accountant has no screen that needs it.
+   */
+  daySchedule(doctorUserId, date, actor, { includeClosed = false } = {}) {
+    const isOwnDay = String(doctorUserId) === String(actor.id || actor._id);
+    if (!isOwnDay && !accessPolicy.isAdmin(actor.role) && actor.role !== ROLES.RECEPTIONIST) {
+      throw ApiError.forbidden('You cannot view this doctor’s day');
+    }
+
     const dayStart = doctorService.startOfUtcDay(date);
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60_000);
-    return this.appointments.dayScheduleFor(doctorUserId, dayStart, dayEnd);
+    return this.appointments.dayAgendaFor(doctorUserId, dayStart, dayEnd, { includeClosed });
   }
 
   /**

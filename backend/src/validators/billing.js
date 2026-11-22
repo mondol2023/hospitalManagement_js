@@ -58,7 +58,8 @@ const list = {
 
 const listForPatient = {
   params: z.object({ patientId: objectIdOrSelf }),
-  query: listQuery({ status: z.enum(BILL_STATUS_VALUES).optional() }),
+  // `open`: bills that still owe something (unpaid or part-paid). Overrides `status`.
+  query: listQuery({ status: z.enum(BILL_STATUS_VALUES).optional(), open: boolish.optional() }),
 };
 
 const outstanding = { query: listQuery({}) };

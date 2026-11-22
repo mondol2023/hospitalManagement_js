@@ -14,7 +14,9 @@ const chart = handle.page((req) =>
   medicalRecordService.chart(req.patient._id, req.user, req.query)
 );
 
-const latest = handle((req) => medicalRecordService.latest(req.patient._id, req.user));
+const latest = handle((req) =>
+  medicalRecordService.latest(req.patient._id, req.user, { withVitals: req.query.withVitals })
+);
 
 const listForDoctor = handle.page((req) =>
   medicalRecordService.listForDoctor(
@@ -43,7 +45,7 @@ const remove = asyncHandler(async (req, res) => {
   return sendSuccess(res, { data, message: 'Medical record deleted' });
 });
 
-const followUpsDue = handle((req) => medicalRecordService.followUpsDue({ days: req.query.days }));
+const followUps = handle.page((req) => medicalRecordService.listFollowUps(req.user, req.query));
 
 const sendFollowUpReminders = asyncHandler(async (req, res) => {
   const data = await medicalRecordService.sendFollowUpReminders({ days: req.query.days });
@@ -60,6 +62,6 @@ module.exports = {
   update,
   addAttachments,
   remove,
-  followUpsDue,
+  followUps,
   sendFollowUpReminders,
 };

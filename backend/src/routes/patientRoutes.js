@@ -38,6 +38,8 @@ router.use(authenticate);
 router.get('/me', controller.me);
 router.patch('/me', validate(schemas.updateOwn), controller.updateOwn);
 router.put('/me/avatar', uploadLimiter, singleImage(), controller.uploadAvatar);
+// Names and photos only (no contact details), resolved from the token, never from an id.
+router.get('/me/care-team', controller.myCareTeam);
 
 router.get('/', requireStaff, validate(schemas.list), controller.list);
 router.get('/caseload', authorize(ROLES.NURSE), validate(schemas.caseload), controller.caseload);

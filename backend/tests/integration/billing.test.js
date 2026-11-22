@@ -67,15 +67,10 @@ describe('billing — raising an invoice', () => {
     expect(bill.invoiceNumber).toMatch(/^INV-/);
   });
 
-  it('is created as a draft on request, invisible to the patient’s outstanding list', async () => {
-    const { bill, patient } = await issuedBill({ body: { isDraft: true } });
-    expect(bill.status).toBe(BILL_STATUS.DRAFT);
+  it('is created as a draft on request', async () => {
+    const { bill } = await issuedBill({ body: { isDraft: true } });
 
-    const res = await api().get(url('/bills/patient/me')).set(patient.headers);
-    expect(expectOk(res)).toHaveLength(1);
-    // still listed for the patient by id, just not implicitly "outstanding" —
-    // the important assertion is that it exists and is a draft.
-    expect(expectOk(res)[0].status).toBe(BILL_STATUS.DRAFT);
+    expect(bill.status).toBe(BILL_STATUS.DRAFT);
   });
 
   it('rejects a discount larger than the subtotal', async () => {
@@ -398,5 +393,153 @@ describe('billing — voiding an invoice', () => {
 
     const res = await api().post(url(`/bills/${bill.id}/void`)).set(staff.headers).send({});
     expectError(res, 409, 'BILL_HAS_PAYMENTS');
+  });
+});
+
+describe('billing — the outstanding list names the patient (B15)', () => {
+  const outstanding = (actor, query = {}) =>
+    api().get(url('/bills/outstanding')).query(query).set(actor.headers);
+
+  it('gives an accountant the patient name beside the MRN', async () => {
+    const patient = await createActor(ROLES.PATIENT, { user: { name: 'Amina Yusuf' } });
+    await issuedBill({ patient });
+    const accountant = await finance();
+
+    const items = expectOk(await outstanding(accountant));
+
+    expect(items).toHaveLength(1);
+    expect(items[0].patient.user.name).toBe('Amina Yusuf');
+    expect(items[0].patient.medicalRecordNumber).toBe(patient.profile.medicalRecordNumber);
+  });
+
+  it('does not expose the patient’s email or phone', async () => {
+    await issuedBill({});
+    const accountant = await finance();
+
+    const [row] = expectOk(await outstanding(accountant));
+
+    expect(row.patient.user.email).toBeUndefined();
+    expect(row.patient.user.phone).toBeUndefined();
+  });
+
+  it('lets a receptionist read the list too', async () => {
+    await issuedBill({});
+
+    expectOk(await outstanding(await clerk()));
+  });
+
+  it('refuses a nurse', async () => {
+    const nurse = await createActor(ROLES.NURSE);
+
+    expectError(await outstanding(nurse), 403, 'FORBIDDEN');
+  });
+});
+
+describe('billing — what a patient sees of their own bills', () => {
+  const pay = (staff, bill, amountCents) =>
+    api()
+      .post(url(`/bills/${bill.id}/payments`))
+      .set(staff.headers)
+      .send({ amountCents, method: 'cash' });
+
+  const mine = (patient, query = {}) =>
+    api().get(url('/bills/patient/me')).query(query).set(patient.headers);
+
+  /** One bill in each state a patient might meet, for one patient. */
+  async function everyState() {
+    const patient = await createActor(ROLES.PATIENT);
+    const staff = await clerk();
+    const raise = async (body = {}) => (await issuedBill({ patient, staff, body })).bill;
+
+    const draft = await raise({ isDraft: true });
+    const unpaid = await raise();
+    const part = await raise();
+    expectOk(await pay(staff, part, 2000));
+    const paid = await raise();
+    expectOk(await pay(staff, paid, 5000));
+    const voided = await raise();
+    expectOk(
+      await api()
+        .post(url(`/bills/${voided.id}/void`))
+        .set(staff.headers)
+        .send({ reason: 'Entered in error' })
+    );
+
+    return { patient, staff, draft, unpaid, part, paid, voided };
+  }
+
+  it('never lists a draft the desk has not issued', async () => {
+    const { patient, draft } = await everyState();
+
+    const items = expectOk(await mine(patient));
+
+    expect(items).toHaveLength(4);
+    expect(items.map((b) => b.id)).not.toContain(draft.id);
+    expect(items.map((b) => b.status)).not.toContain(BILL_STATUS.DRAFT);
+  });
+
+  it('does not let a patient ask for drafts by filtering on status', async () => {
+    const { patient } = await everyState();
+
+    expect(expectOk(await mine(patient, { status: BILL_STATUS.DRAFT }))).toEqual([]);
+  });
+
+  it('still lists drafts for staff reading the same patient’s bills', async () => {
+    const { patient, staff, draft } = await everyState();
+
+    const res = await api().get(url(`/bills/patient/${patient.profile._id}`)).set(staff.headers);
+
+    expect(expectOk(res).map((b) => b.id)).toContain(draft.id);
+  });
+
+  it('answers a guessed draft id with 404 for the patient, so it reveals nothing', async () => {
+    const { patient, draft } = await everyState();
+
+    expectError(await api().get(url(`/bills/${draft.id}`)).set(patient.headers), 404, 'NOT_FOUND');
+  });
+
+  it('lets billing staff open the draft', async () => {
+    const { staff, draft } = await everyState();
+
+    const res = await api().get(url(`/bills/${draft.id}`)).set(staff.headers);
+
+    expect(expectOk(res).status).toBe(BILL_STATUS.DRAFT);
+  });
+
+  it('keeps another patient’s draft a 403, not a 404 that confirms it exists', async () => {
+    const { draft } = await everyState();
+    const stranger = await createActor(ROLES.PATIENT);
+
+    expectError(await api().get(url(`/bills/${draft.id}`)).set(stranger.headers), 403, 'FORBIDDEN');
+  });
+
+  it('returns only unpaid and part-paid bills for open=true', async () => {
+    const { patient, unpaid, part } = await everyState();
+
+    const items = expectOk(await mine(patient, { open: 'true' }));
+
+    expect(items.map((b) => b.id).sort()).toEqual([unpaid.id, part.id].sort());
+  });
+
+  it('lets open override a status filter', async () => {
+    const { patient, unpaid, part } = await everyState();
+
+    const items = expectOk(await mine(patient, { open: 'true', status: BILL_STATUS.PAID }));
+
+    expect(items.map((b) => b.id).sort()).toEqual([unpaid.id, part.id].sort());
+  });
+
+  it.each(['false', false])('treats open=%s as off', async (flag) => {
+    const { patient } = await everyState();
+
+    expect(expectOk(await mine(patient, { open: flag }))).toHaveLength(4);
+  });
+
+  it('still filters a patient’s list by an ordinary status', async () => {
+    const { patient, paid } = await everyState();
+
+    const items = expectOk(await mine(patient, { status: BILL_STATUS.PAID }));
+
+    expect(items.map((b) => b.id)).toEqual([paid.id]);
   });
 });

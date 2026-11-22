@@ -1,6 +1,11 @@
 'use strict';
 
-const { patientRepository, nurseRepository, userRepository } = require('../repositories');
+const {
+  patientRepository,
+  nurseRepository,
+  userRepository,
+  doctorRepository,
+} = require('../repositories');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
 const accessPolicy = require('../utils/accessPolicy');
@@ -15,6 +20,7 @@ class PatientService {
     patients = patientRepository,
     nurses = nurseRepository,
     users = userRepository,
+    doctors = doctorRepository,
     notifications = notificationService,
     beds = bedService,
     storage = storageProvider,
@@ -22,6 +28,7 @@ class PatientService {
     this.patients = patients;
     this.nurses = nurses;
     this.users = users;
+    this.doctors = doctors;
     this.notifications = notifications;
     this.beds = beds;
     this.storage = storage;
@@ -199,6 +206,54 @@ class PatientService {
       patientUserId: accessPolicy.toId(patient.user),
       clinicianUserIds: accessPolicy.careTeamIds(patient),
     };
+  }
+
+  /**
+   * The care team as people, for display: names, photos and the doctor's
+   * specialty. Deliberately no `email` or `phone` — a patient reaches the team
+   * through care-team chat, and staff contact details are not theirs to hold.
+   *
+   * Two queries however many nurses there are (users, plus the doctor's profile).
+   * A member whose account no longer exists is left out rather than returned as
+   * a null entry the client would have to guard against.
+   *
+   * @param {object} patient a patient document carrying `primaryDoctor` and `assignedNurses`
+   * @returns {Promise<{primaryDoctor: object|null, nurses: object[]}>}
+   */
+  async careTeamProfile(patient) {
+    const doctorId = patient.primaryDoctor ? accessPolicy.toId(patient.primaryDoctor) : null;
+    const nurseIds = [...new Set((patient.assignedNurses || []).map(accessPolicy.toId))].filter(
+      Boolean
+    );
+    const userIds = doctorId ? [doctorId, ...nurseIds] : nurseIds;
+    if (!userIds.length) return { primaryDoctor: null, nurses: [] };
+
+    const [users, doctorProfile] = await Promise.all([
+      this.users.find(
+        { _id: { $in: userIds } },
+        { projection: 'name profilePic', limit: userIds.length }
+      ),
+      doctorId ? this.doctors.findByUser(doctorId, { projection: 'specialization department' }) : null,
+    ]);
+    const byId = new Map(users.map((user) => [String(user._id), user]));
+
+    const person = (id) => {
+      const user = byId.get(id);
+      if (!user) return null;
+      return {
+        id,
+        name: user.name,
+        ...(user.profilePic ? { profilePic: user.profilePic } : {}),
+      };
+    };
+
+    const doctor = doctorId ? person(doctorId) : null;
+    if (doctor && doctorProfile) {
+      if (doctorProfile.specialization) doctor.specialization = doctorProfile.specialization;
+      if (doctorProfile.department) doctor.department = doctorProfile.department;
+    }
+
+    return { primaryDoctor: doctor, nurses: nurseIds.map(person).filter(Boolean) };
   }
 
   /** Discharge. */

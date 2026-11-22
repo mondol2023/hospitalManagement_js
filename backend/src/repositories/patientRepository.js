@@ -16,7 +16,17 @@ class PatientRepository extends BaseRepository {
   }
 
   findByMrn(mrn) {
-    return this.findOne({ medicalRecordNumber: String(mrn).toUpperCase().trim() });
+    // Name and bed only: the desk confirms identity by MRN and date of birth, so
+    // contact details stay out of the response.
+    return this.findOne(
+      { medicalRecordNumber: String(mrn).toUpperCase().trim() },
+      {
+        populate: [
+          { path: 'user', select: 'name avatar' },
+          { path: 'bed', select: 'bedNumber ward' },
+        ],
+      }
+    );
   }
 
   /**

@@ -4,15 +4,25 @@ const {
   medicalRecordRepository,
   patientRepository,
   medicineRepository,
+  appointmentRepository,
 } = require('../repositories');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
 const accessPolicy = require('../utils/accessPolicy');
-const { ROLES, NOTIFICATION_TYPE } = require('../utils/constants');
+const { ROLES, NOTIFICATION_TYPE, APPOINTMENT_STATUS } = require('../utils/constants');
 const notificationService = require('./notificationService');
 const storageProvider = require('./providers/storageProvider');
 
 const MAX_ATTACHMENTS = 20;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DUPLICATE_KEY = 11000;
+
+/** How far back an unmet follow-up still counts as overdue; older ones have lapsed. */
+const OVERDUE_WINDOW_DAYS = 30;
+const DEFAULT_FOLLOW_UP_DAYS = 7;
+
+const alreadyRecorded = () =>
+  ApiError.conflict('This visit already has a record', { code: 'APPOINTMENT_ALREADY_RECORDED' });
 
 /** The clinical encounter record — diagnosis, treatment plan, prescriptions. */
 class MedicalRecordService {
@@ -20,12 +30,14 @@ class MedicalRecordService {
     records = medicalRecordRepository,
     patients = patientRepository,
     medicines = medicineRepository,
+    appointments = appointmentRepository,
     notifications = notificationService,
     storage = storageProvider,
   } = {}) {
     this.records = records;
     this.patients = patients;
     this.medicines = medicines;
+    this.appointments = appointments;
     this.notifications = notifications;
     this.storage = storage;
   }
@@ -66,10 +78,10 @@ class MedicalRecordService {
   }
 
   /** The latest encounter — what the ward round opens with. */
-  async latest(patientId, actor) {
+  async latest(patientId, actor, { withVitals = false } = {}) {
     const patient = await this._requirePatient(patientId);
     this._assertCanRead(patient, actor);
-    return this.records.latestFor(patient._id);
+    return this.records.latestFor(patient._id, { withVitals });
   }
 
   // --- Writes ---------------------------------------------------------------
@@ -81,9 +93,10 @@ class MedicalRecordService {
 
     if (!payload.diagnosis) throw ApiError.badRequest('A diagnosis is required');
 
+    await this._assertLinkableAppointment(payload.appointmentId, patient, actor);
     const prescriptions = await this._resolvePrescriptions(payload.prescriptions);
 
-    const record = await this.records.create({
+    const record = await this._createRecord({
       patient: patient._id,
       doctor: actor.id,
       appointment: payload.appointmentId,
@@ -108,6 +121,49 @@ class MedicalRecordService {
       doctor: String(actor.id),
     });
     return record.toJSON();
+  }
+
+  /**
+   * @private the unique index on `appointment` is the authority when two
+   * submissions race past `_assertLinkableAppointment`; its error becomes the
+   * same 409 the check gives.
+   */
+  async _createRecord(doc) {
+    try {
+      return await this.records.create(doc);
+    } catch (error) {
+      if (error?.code === DUPLICATE_KEY && error.keyPattern?.appointment) throw alreadyRecorded();
+      throw error;
+    }
+  }
+
+  /**
+   * @private a record may only claim this doctor's own visit with this patient,
+   * and only once. Any status but cancelled: a doctor may write up a visit
+   * before marking it complete.
+   */
+  async _assertLinkableAppointment(appointmentId, patient, actor) {
+    if (!appointmentId) return;
+
+    const appointment = await this.appointments.findById(appointmentId, {
+      projection: 'patient doctor status',
+    });
+    if (!appointment) throw ApiError.notFound('Appointment');
+
+    if (
+      String(appointment.patient) !== String(patient._id) ||
+      String(appointment.doctor) !== String(actor.id || actor._id)
+    ) {
+      throw ApiError.badRequest('That appointment is not this patient’s visit with you', {
+        code: 'APPOINTMENT_MISMATCH',
+      });
+    }
+    if (appointment.status === APPOINTMENT_STATUS.CANCELLED) {
+      throw ApiError.conflict('A cancelled appointment cannot be recorded', {
+        code: 'APPOINTMENT_CANCELLED',
+      });
+    }
+    if (await this.records.exists({ appointment: appointment._id })) throw alreadyRecorded();
   }
 
   /** Amends an encounter. */
@@ -183,10 +239,43 @@ class MedicalRecordService {
 
   // --- Follow-ups -----------------------------------------------------------
 
-  /** Follow-ups falling due in the next `days`. */
+  /**
+   * The follow-up listing, scoped to a caseload.
+   *
+   * A doctor sees only their own and may not name another doctor. An
+   * administrator sees everyone's and may filter by `doctorId`. A nurse is a
+   * care reader but has no caseload of their own here (D4).
+   *
+   * Upcoming: due in `[now, now + days)`. Overdue: due in the last
+   * `OVERDUE_WINDOW_DAYS`, minus patients the same doctor has seen since.
+   */
+  listFollowUps(actor, { days = DEFAULT_FOLLOW_UP_DAYS, overdue = false, doctorId, ...query } = {}) {
+    const actorId = String(actor.id || actor._id);
+    let doctor;
+
+    if (actor.role === ROLES.DOCTOR) {
+      if (doctorId && String(doctorId) !== actorId) {
+        throw ApiError.forbidden('You can only list your own follow-ups');
+      }
+      doctor = actorId;
+    } else if (accessPolicy.isAdmin(actor.role)) {
+      doctor = doctorId;
+    } else {
+      throw ApiError.forbidden('Follow-ups are listed for doctors and administrators');
+    }
+
+    const now = new Date();
+    const window = overdue
+      ? { from: new Date(now.getTime() - OVERDUE_WINDOW_DAYS * DAY_MS), to: now }
+      : { from: now, to: new Date(now.getTime() + days * DAY_MS) };
+
+    return this.records.listFollowUps({ doctor, ...window, excludeReturned: overdue }, query);
+  }
+
+  /** Follow-ups falling due in the next `days` — the reminder's query, unpaged. */
   followUpsDue({ days = 1 } = {}) {
     const from = new Date();
-    const to = new Date(from.getTime() + days * 24 * 60 * 60 * 1000);
+    const to = new Date(from.getTime() + days * DAY_MS);
     return this.records.followUpsDue(from, to);
   }
 

@@ -8,7 +8,7 @@ const {
   createPatientProfile,
   createUser,
 } = require('../helpers/factories');
-const { Patient, Bed, Notification } = require('../../src/models');
+const { Patient, Bed, Notification, User } = require('../../src/models');
 const { ROLES, BED_STATUS } = require('../../src/utils/constants');
 
 /**
@@ -261,6 +261,58 @@ describe('patients — the directory is staff-only', () => {
 
     const missing = await api().get(url('/patients/mrn/MRN-NOPE-0000')).set(receptionist.headers);
     expectError(missing, 404, 'NOT_FOUND');
+  });
+});
+
+describe('patients — the MRN lookup names who it found (B13)', () => {
+  it('returns the name and bed for a lowercase, padded MRN', async () => {
+    const receptionist = await createActor(ROLES.RECEPTIONIST);
+    const bed = await createBed({ bedNumber: 'B-12', ward: 'Ward B' });
+    const patient = await createActor(ROLES.PATIENT, {
+      user: { name: 'Amina Yusuf' },
+      profile: { isAdmitted: true, ward: 'Ward B', bed: bed._id },
+    });
+    const mrn = `  ${patient.profile.medicalRecordNumber.toLowerCase()} `;
+
+    const res = await api()
+      .get(url(`/patients/mrn/${encodeURIComponent(mrn)}`))
+      .set(receptionist.headers);
+    const body = expectOk(res);
+
+    expect(body.user.name).toBe('Amina Yusuf');
+    expect(body.bed.bedNumber).toBe('B-12');
+    expect(body.bed.ward).toBe('Ward B');
+  });
+
+  it('does not expose contact details of the patient account', async () => {
+    const receptionist = await createActor(ROLES.RECEPTIONIST);
+    const patient = await createActor(ROLES.PATIENT);
+
+    const res = await api()
+      .get(url(`/patients/mrn/${patient.profile.medicalRecordNumber}`))
+      .set(receptionist.headers);
+    const body = expectOk(res);
+
+    expect(body.user.email).toBeUndefined();
+    expect(body.user.phone).toBeUndefined();
+  });
+
+  it('refuses a patient token', async () => {
+    const patient = await createActor(ROLES.PATIENT);
+
+    const res = await api()
+      .get(url(`/patients/mrn/${patient.profile.medicalRecordNumber}`))
+      .set(patient.headers);
+
+    expectError(res, 403, 'FORBIDDEN');
+  });
+
+  it('404s an unknown MRN', async () => {
+    const receptionist = await createActor(ROLES.RECEPTIONIST);
+
+    const res = await api().get(url('/patients/mrn/MRN-NOPE-0000')).set(receptionist.headers);
+
+    expectError(res, 404, 'NOT_FOUND');
   });
 });
 
@@ -565,18 +617,138 @@ describe('patients — composing the care team', () => {
     expect(expectOk(await chart(patient, newDoctor, { bloodGroup: 'B+' })).bloodGroup).toBe('B+');
   });
 
-  it('reports the care team as the ids that authorise bedside work', async () => {
+  it('still exposes the care team as the ids that authorise bedside work, through the service', async () => {
     const { doctor, nurse, patient } = await bedside();
+
+    // `conversationService` seeds a care-team thread from these ids. The HTTP
+    // routes now return names (below); the id-only shape lives on in the service.
+    const team = await require('../../src/services/patientService').careTeam(patient.profile._id);
+
+    expect(team.patientUserId).toBe(String(patient.user._id));
+    expect(team.clinicianUserIds.sort()).toEqual(
+      [String(doctor.user._id), String(nurse.user._id)].sort()
+    );
+  });
+});
+
+describe('patients — the care team is shown by name, never by contact details', () => {
+  /** A team whose members have names, a specialization, and private contact details. */
+  async function namedTeam() {
+    const doctor = await createActor(ROLES.DOCTOR, {
+      user: { name: 'Dr. Okafor', email: 'okafor.private@hospital.test', phone: '+15550003333' },
+      profile: { specialization: 'cardiology', department: 'Cardiology' },
+    });
+    const nurse = await createActor(ROLES.NURSE, {
+      user: { name: 'Nurse Bello', email: 'bello.private@hospital.test', phone: '+15550004444' },
+      profile: { assignedWards: ['ICU'] },
+    });
+    const patient = await createAdmittedPatient({ doctor, nurses: [nurse] });
+    return { doctor, nurse, patient };
+  }
+
+  const myTeam = (actor) => api().get(url('/patients/me/care-team')).set(actor.headers);
+
+  it('gives a patient their doctor and nurses with names and the doctor’s specialty', async () => {
+    const { doctor, nurse, patient } = await namedTeam();
+
+    const team = expectOk(await myTeam(patient));
+
+    expect(team.primaryDoctor).toEqual({
+      id: String(doctor.user._id),
+      name: 'Dr. Okafor',
+      specialization: 'cardiology',
+      department: 'Cardiology',
+    });
+    expect(team.nurses).toEqual([{ id: String(nurse.user._id), name: 'Nurse Bello' }]);
+  });
+
+  it('never returns a staff email or phone number to the patient (D1)', async () => {
+    const { patient } = await namedTeam();
+
+    const res = await myTeam(patient);
+    expectOk(res);
+
+    const raw = JSON.stringify(res.body);
+    expect(raw).not.toMatch(/private@hospital\.test/);
+    expect(raw).not.toMatch(/\+1555000[34]/);
+    expect(raw).not.toMatch(/"(email|phone)"/);
+  });
+
+  it('includes a profile picture when the member has one', async () => {
+    const doctor = await createActor(ROLES.DOCTOR, {
+      user: { profilePic: 'https://cdn.hospital.test/okafor.png' },
+    });
+    const patient = await createAdmittedPatient({ doctor });
+
+    const team = expectOk(await myTeam(patient));
+
+    expect(team.primaryDoctor.profilePic).toBe('https://cdn.hospital.test/okafor.png');
+  });
+
+  it('returns an empty team, not an error, for a patient nobody has been assigned to', async () => {
+    const patient = await createActor(ROLES.PATIENT);
+
+    expect(expectOk(await myTeam(patient))).toEqual({ primaryDoctor: null, nurses: [] });
+  });
+
+  it('leaves a deleted nurse out of the list instead of returning a null entry', async () => {
+    const { nurse, patient } = await namedTeam();
+    await User.deleteOne({ _id: nurse.user._id });
+
+    const team = expectOk(await myTeam(patient));
+
+    expect(team.nurses).toEqual([]);
+  });
+
+  it('returns a null doctor when the primary doctor’s account is gone', async () => {
+    const { doctor, patient } = await namedTeam();
+    await User.deleteOne({ _id: doctor.user._id });
+
+    expect(expectOk(await myTeam(patient)).primaryDoctor).toBeNull();
+  });
+
+  it('answers a patient for themselves only — it takes no patient id to read someone else’s', async () => {
+    const { patient: other } = await namedTeam();
+    const mine = await createActor(ROLES.PATIENT);
+
+    // `/me/care-team` resolves the record from the token. There is no parameter
+    // to tamper with, so the only way to see another team is the staff route.
+    expect(expectOk(await myTeam(mine)).primaryDoctor).toBeNull();
+    expect(expectOk(await myTeam(other)).primaryDoctor).not.toBeNull();
+  });
+
+  it('404s an employee on the patient route, as they have no patient record', async () => {
+    const nurse = await createActor(ROLES.NURSE);
+
+    expectError(await myTeam(nurse), 404, 'NOT_FOUND');
+  });
+
+  it('refuses an anonymous caller', async () => {
+    expectError(await api().get(url('/patients/me/care-team')), 401, 'TOKEN_MISSING');
+  });
+
+  it('gives staff the same shape on the patient-id route — the shape the chart page reads', async () => {
+    const { doctor, nurse, patient } = await namedTeam();
 
     const res = await api()
       .get(url(`/patients/${patient.profile._id}/care-team`))
       .set(doctor.headers);
     const team = expectOk(res);
 
-    expect(team.patientUserId).toBe(String(patient.user._id));
-    expect(team.clinicianUserIds.sort()).toEqual(
-      [String(doctor.user._id), String(nurse.user._id)].sort()
-    );
+    expect(team.primaryDoctor.name).toBe('Dr. Okafor');
+    expect(team.nurses.map((n) => n.id)).toEqual([String(nurse.user._id)]);
+    expect(team.clinicianUserIds).toBeUndefined();
+  });
+
+  it('refuses a patient the staff route, so one patient cannot read another’s team', async () => {
+    const { patient: other } = await namedTeam();
+    const snoop = await createActor(ROLES.PATIENT);
+
+    const res = await api()
+      .get(url(`/patients/${other.profile._id}/care-team`))
+      .set(snoop.headers);
+
+    expectError(res, 403, 'FORBIDDEN');
   });
 });
 

@@ -7,6 +7,7 @@ const {
   authorize,
   requireAdmin,
   requireClinician,
+  requireCareReader,
   loadPatient,
   reportLimiter,
   uploadLimiter,
@@ -42,17 +43,19 @@ const doctorOnly = authorize(ROLES.DOCTOR);
 // Fixed segments before `/:id`.
 router.get('/me', doctorOnly, validate(schemas.myRecords), controller.myRecords);
 
+// The clinical read tier at the door; the service narrows it to a caseload — a
+// doctor sees their own, an administrator everyone's, a nurse none (D4).
 router.get(
   '/follow-ups',
-  requireClinician,
+  requireCareReader,
   validate(schemas.followUps),
-  controller.followUpsDue
+  controller.followUps
 );
 router.post(
   '/follow-ups/remind',
   requireAdmin,
   reportLimiter,
-  validate(schemas.followUps),
+  validate(schemas.followUpsReminder),
   controller.sendFollowUpReminders
 );
 

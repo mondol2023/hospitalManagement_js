@@ -10,6 +10,7 @@ const {
   optionalText,
   dateValue,
   nonEmptyPatch,
+  boolish,
 } = require('./common');
 const { vitals } = require('./vitals');
 
@@ -58,7 +59,8 @@ const chart = {
   }),
 };
 
-const latest = { params: patientIdParam };
+/** `withVitals`: the newest record that took at least one reading, not just the newest. */
+const latest = { params: patientIdParam, query: z.object({ withVitals: boolish.optional() }) };
 
 const listForDoctor = {
   params: z.object({ doctorUserId: objectId }),
@@ -106,8 +108,28 @@ const update = {
   ),
 };
 
+const followUpDays = z.coerce.number().int().min(1).max(30).optional();
+
+/**
+ * The follow-up *listing*: paged, scoped to the caller's caseload. `days` sets
+ * the upcoming window (default 7); `overdue` switches to the missed-in-the-last
+ * -30-days view and ignores `days`. `boolish`, not `z.coerce.boolean()`, which
+ * reads the string "false" as true.
+ */
 const followUps = {
-  query: z.object({ days: z.coerce.number().int().min(1).max(30).optional() }),
+  query: listQuery({
+    days: followUpDays,
+    overdue: boolish.optional(),
+    doctorId: objectId.optional(),
+  }),
+};
+
+/**
+ * The reminder sweep keeps its own, narrower schema: it must reach every due
+ * patient, so it takes no paging, and it is not scoped to a doctor.
+ */
+const followUpsReminder = {
+  query: z.object({ days: followUpDays }),
 };
 
 module.exports = {
@@ -119,4 +141,5 @@ module.exports = {
   create,
   update,
   followUps,
+  followUpsReminder,
 };

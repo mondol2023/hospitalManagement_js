@@ -10,7 +10,7 @@ const ApiError = require('../utils/ApiError');
 const accessPolicy = require('../utils/accessPolicy');
 const rules = require('../utils/billingRules');
 const { withTransaction } = require('../utils/transaction');
-const { BILL_STATUS, NOTIFICATION_TYPE } = require('../utils/constants');
+const { BILL_STATUS, NOTIFICATION_TYPE, ROLES } = require('../utils/constants');
 const { getPaymentProvider, availableMethods } = require('./providers');
 const cacheService = require('./cacheService');
 const notificationService = require('./notificationService');
@@ -61,7 +61,9 @@ class BillingService {
   async listForPatient(patientId, actor, query = {}) {
     const patient = await this._requirePatient(patientId);
     this._assertCanRead(patient, actor);
-    return this.bills.listForPatient(patient._id, query);
+    return this.bills.listForPatient(patient._id, query, {
+      excludeDrafts: this._isPatient(actor),
+    });
   }
 
   async getById(billId, actor) {
@@ -69,6 +71,11 @@ class BillingService {
       populate: { path: 'patient', select: 'medicalRecordNumber user ward' },
     });
     this._assertCanRead(bill.patient, actor);
+    // After the ownership check, so another patient's draft is still a 403; for the
+    // owner it is a 404, so a guessed id cannot confirm a bill is being prepared.
+    if (this._isPatient(actor) && bill.status === BILL_STATUS.DRAFT) {
+      throw ApiError.notFound('Bill');
+    }
     return bill;
   }
 
@@ -350,6 +357,10 @@ class BillingService {
   }
 
   // The patient reads their own invoices; anyone else must be an employee.
+  _isPatient(actor) {
+    return Boolean(actor) && actor.role === ROLES.PATIENT;
+  }
+
   _assertCanRead(patient, actor) {
     if (accessPolicy.isSelf(actor, patient)) return;
     if (accessPolicy.isStaff(actor && actor.role)) return;

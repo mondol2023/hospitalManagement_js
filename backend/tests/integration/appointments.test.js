@@ -403,8 +403,8 @@ describe('appointments — who may see which appointment', () => {
       .set(patient.headers);
     expectError(day, 403, 'FORBIDDEN');
 
-    // A whole ward's day, listing named patients, is staff information.
-    const staff = await createActor(ROLES.NURSE);
+    // A doctor's day lists named patients: the front desk may read it (D3).
+    const staff = await createActor(ROLES.RECEPTIONIST);
     const asStaff = await api()
       .get(url(`/appointments/doctor/${doctor.user._id}/day`))
       .query({ date: at.toISOString() })
@@ -580,5 +580,181 @@ describe('appointments — rescheduling re-runs every booking check', () => {
     const stranger = await createActor(ROLES.PATIENT);
 
     expectError(await move(appointment, stranger, slotAt({ hour: 16 })), 403, 'FORBIDDEN');
+  });
+});
+
+describe('appointments — the staff list carries names (B14)', () => {
+  const HOUR = 60 * 60 * 1000;
+  const startOfToday = () => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  async function today() {
+    const doctorA = await bookableDoctor({});
+    const doctorB = await bookableDoctor({});
+    const patient = await createActor(ROLES.PATIENT, { user: { name: 'Amina Yusuf' } });
+    const make = (doctor, hours, status) =>
+      Appointment.create({
+        patient: patient.profile._id,
+        doctor: doctor.user._id,
+        scheduledAt: new Date(startOfToday().getTime() + hours * HOUR),
+        status,
+      });
+    const rows = {
+      pending: await make(doctorA, 10, APPOINTMENT_STATUS.PENDING),
+      confirmed: await make(doctorB, 11, APPOINTMENT_STATUS.CONFIRMED),
+      tomorrow: await make(doctorA, 34, APPOINTMENT_STATUS.PENDING),
+    };
+    return { doctorA, doctorB, patient, rows };
+  }
+
+  const range = () => ({
+    from: startOfToday().toISOString(),
+    to: new Date(startOfToday().getTime() + 24 * HOUR).toISOString(),
+  });
+  const listAs = (actor, query) => api().get(url('/appointments')).query(query).set(actor.headers);
+
+  it('gives a receptionist the patient name and the doctor name for today', async () => {
+    const { doctorA } = await today();
+    const receptionist = await createActor(ROLES.RECEPTIONIST);
+
+    const items = expectOk(await listAs(receptionist, range()));
+
+    expect(items).toHaveLength(2);
+    const row = items.find((i) => i.doctor.name === doctorA.user.name && i.status === 'pending');
+    expect(row.patient.user.name).toBe('Amina Yusuf');
+    expect(row.patient.medicalRecordNumber).toMatch(/^MRN-/);
+  });
+
+  it('still narrows by status and by doctor', async () => {
+    const { doctorB, rows } = await today();
+    const receptionist = await createActor(ROLES.RECEPTIONIST);
+
+    const byStatus = expectOk(await listAs(receptionist, { ...range(), status: 'confirmed' }));
+    expect(byStatus.map((i) => i.id)).toEqual([String(rows.confirmed._id)]);
+
+    const byDoctor = expectOk(
+      await listAs(receptionist, { ...range(), doctor: String(doctorB.user._id) })
+    );
+    expect(byDoctor.map((i) => i.id)).toEqual([String(rows.confirmed._id)]);
+  });
+});
+
+describe('appointments — a patient’s list honours its filters', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const inDays = (days) => new Date(Date.now() + days * DAY);
+
+  /**
+   * Rows are written through the model: the API refuses to book into the past,
+   * and a past visit that is still `pending` is exactly the stale row the
+   * `upcoming` flag exists to hide.
+   */
+  async function history() {
+    const patient = await createActor(ROLES.PATIENT);
+    const doctorA = await bookableDoctor();
+    const doctorB = await bookableDoctor();
+    const make = (doctor, days, status) =>
+      Appointment.create({
+        patient: patient.profile._id,
+        doctor: doctor.user._id,
+        scheduledAt: inDays(days),
+        status,
+      });
+
+    const rows = {
+      stalePending: await make(doctorA, -3, APPOINTMENT_STATUS.PENDING),
+      pastCompleted: await make(doctorA, -10, APPOINTMENT_STATUS.COMPLETED),
+      cancelledSoon: await make(doctorA, 2, APPOINTMENT_STATUS.CANCELLED),
+      later: await make(doctorB, 9, APPOINTMENT_STATUS.PENDING),
+      soon: await make(doctorA, 4, APPOINTMENT_STATUS.CONFIRMED),
+    };
+    return { patient, doctorA, doctorB, rows };
+  }
+
+  const ids = (items) => items.map((item) => item.id);
+  const list = (actor, query, path = '/appointments') =>
+    api().get(url(path)).query(query).set(actor.headers);
+
+  it('filters by status', async () => {
+    const { patient, rows } = await history();
+
+    const items = expectOk(await list(patient, { status: APPOINTMENT_STATUS.CANCELLED }));
+
+    expect(ids(items)).toEqual([String(rows.cancelledSoon._id)]);
+  });
+
+  it('filters by doctor', async () => {
+    const { patient, doctorB, rows } = await history();
+
+    const items = expectOk(await list(patient, { doctor: String(doctorB.user._id) }));
+
+    expect(ids(items)).toEqual([String(rows.later._id)]);
+  });
+
+  it('filters by date range — from is inclusive and to is exclusive', async () => {
+    const { patient, rows } = await history();
+    const exactly = rows.soon.scheduledAt.toISOString();
+
+    const inclusiveFrom = expectOk(await list(patient, { from: exactly, to: inDays(5).toISOString() }));
+    expect(ids(inclusiveFrom)).toEqual([String(rows.soon._id)]);
+
+    const exclusiveTo = expectOk(await list(patient, { from: inDays(3).toISOString(), to: exactly }));
+    expect(exclusiveTo).toEqual([]);
+  });
+
+  it('returns only the visits still ahead for upcoming=true, soonest first', async () => {
+    const { patient, rows } = await history();
+
+    const items = expectOk(await list(patient, { upcoming: 'true' }));
+
+    // Not the stale pending visit from three days ago, the completed one, or the cancelled one.
+    expect(ids(items)).toEqual([String(rows.soon._id), String(rows.later._id)]);
+  });
+
+  it('lets upcoming override a conflicting status and sort', async () => {
+    const { patient, rows } = await history();
+
+    const items = expectOk(
+      await list(patient, { upcoming: 'true', status: APPOINTMENT_STATUS.COMPLETED, sort: '-scheduledAt' })
+    );
+
+    expect(ids(items)).toEqual([String(rows.soon._id), String(rows.later._id)]);
+  });
+
+  it('honours limit with upcoming, which is how the dashboard asks for three', async () => {
+    const { patient, rows } = await history();
+
+    const res = await list(patient, { upcoming: 'true', limit: 1 });
+
+    expect(ids(expectOk(res))).toEqual([String(rows.soon._id)]);
+    expect(res.body.meta.pagination.total).toBe(2);
+  });
+
+  it.each(['false', false])('treats upcoming=%s as off', async (flag) => {
+    const { patient } = await history();
+
+    const items = expectOk(await list(patient, { upcoming: flag }));
+
+    expect(items).toHaveLength(5);
+  });
+
+  it('applies upcoming on the staff patient-id route as well', async () => {
+    const { patient, rows } = await history();
+    const receptionist = await createActor(ROLES.RECEPTIONIST);
+
+    const items = expectOk(
+      await list(receptionist, { upcoming: 'true' }, `/appointments/patient/${patient.profile._id}`)
+    );
+
+    expect(ids(items)).toEqual([String(rows.soon._id), String(rows.later._id)]);
+  });
+
+  it('still shows a patient only their own appointments when filtering', async () => {
+    await history();
+    const other = await createActor(ROLES.PATIENT);
+
+    expect(expectOk(await list(other, { upcoming: 'true' }))).toEqual([]);
   });
 });

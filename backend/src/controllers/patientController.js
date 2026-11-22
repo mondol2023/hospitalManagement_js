@@ -44,7 +44,11 @@ const setPrimaryDoctor = handle((req) =>
   patientService.setPrimaryDoctor(req.patient._id, req.body.doctorUserId)
 );
 
-const careTeam = handle((req) => patientService.careTeam(req.patient._id));
+const careTeam = handle((req) => patientService.careTeamProfile(req.patient));
+
+const myCareTeam = handle(async (req) =>
+  patientService.careTeamProfile(await patientService.requireOwnRecord(req.user.id))
+);
 
 /**
  * The actor is passed through because releasing the bed is charted against whoever discharged
@@ -66,5 +70,6 @@ module.exports = {
   unassignNurse,
   setPrimaryDoctor,
   careTeam,
+  myCareTeam,
   discharge,
 };

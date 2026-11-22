@@ -59,4 +59,18 @@ medicalRecordSchema.index({ patient: 1, visitDate: -1 });
 medicalRecordSchema.index({ doctor: 1, visitDate: -1 });
 medicalRecordSchema.index({ followUpDate: 1 });
 
+/**
+ * One record per appointment. The service checks first and answers with a
+ * friendly 409; this index is what holds when two submissions race. Partial, so
+ * the many records written without an appointment never collide.
+ */
+medicalRecordSchema.index(
+  { appointment: 1 },
+  {
+    unique: true,
+    name: 'uniq_record_per_appointment',
+    partialFilterExpression: { appointment: { $type: 'objectId' } },
+  }
+);
+
 module.exports = mongoose.model('MedicalRecord', medicalRecordSchema);
