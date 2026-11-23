@@ -366,6 +366,28 @@ describe('route split', () => {
       );
     });
 
+    describe('pharmacy reports', () => {
+      it.each<[Role]>([['admin'], ['manager']])(
+        'opens /app/admin/pharmacy-reports for a %s',
+        async (role) => {
+          signIn(role);
+          renderAt('/app/admin/pharmacy-reports');
+          expect(
+            await screen.findByRole('heading', { level: 1, name: /^pharmacy reports$/i })
+          ).toBeInTheDocument();
+        }
+      );
+
+      it.each<[Role]>([['pharmacist'], ['nurse'], ['doctor'], ['patient'], ['receptionist'], ['accountant']])(
+        'keeps /app/admin/pharmacy-reports closed to a %s',
+        async (role) => {
+          signIn(role);
+          renderAt('/app/admin/pharmacy-reports');
+          expect(await screen.findByText(/do not have access to this area/i)).toBeInTheDocument();
+        }
+      );
+    });
+
     it('sends a signed-out visitor from /app/profile to sign-in', async () => {
       renderAt('/app/profile');
       expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument();

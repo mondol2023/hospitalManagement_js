@@ -8,7 +8,7 @@ import { ApiError } from '@/shared/api/envelope';
 import { cn } from '@/shared/lib/cn';
 import { formatDate, humanizeEnum } from '@/shared/lib/format';
 import { formatMoney } from '@/shared/lib/money';
-import { collapsible, staggerRow, TRANSITION } from '@/shared/motion/variants';
+import { collapsible, staggerRow } from '@/shared/motion/variants';
 import type { Bill } from '@/shared/types/domain';
 import {
   Badge,
@@ -18,6 +18,8 @@ import {
   PageHeader,
   Pagination,
   Skeleton,
+  TabPanel,
+  Tabs,
 } from '@/shared/ui';
 
 import { billStatusWord, dueLine, owedCents } from '../model/bills';
@@ -83,40 +85,17 @@ export function MyBillsView() {
     <div>
       <PageHeader title="Billing" description="What you owe, what you have paid, and how to pay." />
 
-      <div role="tablist" aria-label="Bills" className="mb-5 flex gap-6 border-b border-line">
-        {TABS.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            id={`${tabsId}-${id}`}
-            aria-selected={tab === id}
-            aria-controls={`${tabsId}-panel`}
-            className={cn(
-              'relative -mb-px inline-flex items-center text-sm font-medium transition-colors',
-              TOUCH,
-              tab === id ? 'text-ink' : 'text-muted hover:text-ink'
-            )}
-            onClick={() => chooseTab(id)}
-          >
-            {label}
-            {tab === id && (
-              <motion.span
-                layoutId="bills-tab"
-                transition={TRANSITION.spring}
-                className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-brand"
-              />
-            )}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        tabsId={tabsId}
+        label="Bills"
+        value={tab}
+        onChange={(id) => chooseTab(id as TabId)}
+        items={TABS}
+        layoutId="bills-tab"
+        className="mb-5"
+      />
 
-      <div
-        role="tabpanel"
-        id={`${tabsId}-panel`}
-        aria-labelledby={`${tabsId}-${tab}`}
-        className="flex max-w-4xl flex-col gap-6"
-      >
+      <TabPanel tabsId={tabsId} value={tab} className="flex max-w-4xl flex-col gap-6">
         {anythingToPay && howToPay}
 
         {bills.isLoading ? (
@@ -162,7 +141,7 @@ export function MyBillsView() {
         )}
 
         {!anythingToPay && howToPay}
-      </div>
+      </TabPanel>
     </div>
   );
 }

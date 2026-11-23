@@ -1,11 +1,12 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 
 import { cn } from '@/shared/lib/cn';
 import { modalOverlay, modalPanel } from '@/shared/motion/variants';
 import { Button } from '@/shared/ui/Button';
+import { Input } from '@/shared/ui/Input';
 
 /**
  * Built on Radix Dialog rather than a hand-rolled portal, because the parts
@@ -125,6 +126,10 @@ export function Modal({
  * through this so the wording, the tone and the busy-lock behave identically —
  * and so no screen invents its own softer confirmation for an action the
  * backend treats as irreversible.
+ *
+ * `confirmPhrase` is for the few actions that cannot be undone and reach many
+ * people (a purge, a deactivation): the confirm button stays disabled until the
+ * phrase is typed exactly, so a reflexive click on "Confirm" is not enough.
  */
 export function ConfirmDialog({
   open,
@@ -135,6 +140,7 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   onConfirm,
   busy = false,
+  confirmPhrase,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -144,7 +150,18 @@ export function ConfirmDialog({
   cancelLabel?: string;
   onConfirm: () => void;
   busy?: boolean;
+  /** Typed exactly (after trimming) before the confirm button enables. */
+  confirmPhrase?: string;
 }) {
+  const [typed, setTyped] = useState('');
+  const inputId = useId();
+  const phraseMatches = confirmPhrase === undefined || typed.trim() === confirmPhrase;
+
+  // A fresh dialog every time: a phrase typed for last time must not carry over.
+  useEffect(() => {
+    if (!open) setTyped('');
+  }, [open]);
+
   return (
     <Modal
       open={open}
@@ -157,13 +174,28 @@ export function ConfirmDialog({
           <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>
             {cancelLabel}
           </Button>
-          <Button variant="danger" onClick={onConfirm} loading={busy}>
+          <Button variant="danger" onClick={onConfirm} loading={busy} disabled={phraseMatches ? undefined : true}>
             {confirmLabel}
           </Button>
         </>
       }
     >
       <p className="text-sm text-muted">{message}</p>
+      {confirmPhrase !== undefined && (
+        <div className="mt-4">
+          <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium">
+            Type <span className="font-mono">{confirmPhrase}</span> to confirm
+          </label>
+          <Input
+            id={inputId}
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={busy}
+          />
+        </div>
+      )}
     </Modal>
   );
 }

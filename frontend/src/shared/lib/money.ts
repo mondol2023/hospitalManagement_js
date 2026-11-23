@@ -58,6 +58,12 @@ export function parseMoneyToCents(input: string): Cents | null {
   return Math.round(value * 100);
 }
 
+/** A typed major-unit amount (`"12.50"`) to cents, or `null` if it is not an amount. Same rules as `parseMoneyToCents`. */
+export const toCents = parseMoneyToCents;
+
+/** Cents to the major-unit string a money input shows. Same as `centsToInputValue`. */
+export const fromCents = (cents: Cents): string => centsToInputValue(cents);
+
 /** `1250` cents → `"12.50"`, the value a `<input type="number" step="0.01">` wants. */
 export function centsToInputValue(cents: Cents): string {
   return (cents / 100).toFixed(2);

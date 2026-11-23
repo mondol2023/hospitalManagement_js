@@ -1,12 +1,11 @@
 import { BellRing, CalendarCheck } from 'lucide-react';
-import { useState, type KeyboardEvent } from 'react';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { selectRole, useAuthStore } from '@/features/auth';
 import { useDoctors } from '@/features/directory';
 import type { FollowUpParams, FollowUpRow } from '@/features/patients';
 import { ApiError } from '@/shared/api/envelope';
-import { cn } from '@/shared/lib/cn';
 import { formatDate } from '@/shared/lib/format';
 import { ADMIN_ROLES } from '@/shared/lib/roles';
 import { refId, refObject } from '@/shared/types/domain';
@@ -21,6 +20,7 @@ import {
   PageHeader,
   Pagination,
   Select,
+  Tabs,
   type Column,
 } from '@/shared/ui';
 
@@ -133,15 +133,6 @@ export function FollowUpsPage() {
     setParams(next.id === TABS[0].id ? {} : { tab: next.id }, { replace: true });
   }
 
-  function onTabKeys(event: KeyboardEvent<HTMLDivElement>) {
-    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
-    if (!step) return;
-    event.preventDefault();
-    const next = TABS[(TABS.indexOf(tab) + step + TABS.length) % TABS.length]!;
-    chooseTab(next);
-    document.getElementById(`followups-tab-${next.id}`)?.focus();
-  }
-
   return (
     <div>
       <PageHeader
@@ -164,36 +155,14 @@ export function FollowUpsPage() {
         }
       >
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div
-            role="tablist"
-            aria-label="Follow-up window"
-            onKeyDown={onTabKeys}
-            className="flex gap-1 rounded-control border border-line bg-surface p-1"
-          >
-            {TABS.map((item) => {
-              const selected = item.id === tab.id;
-              return (
-                <button
-                  key={item.id}
-                  id={`followups-tab-${item.id}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  aria-controls="followups-panel"
-                  tabIndex={selected ? 0 : -1}
-                  onClick={() => chooseTab(item)}
-                  className={cn(
-                    'h-8 rounded-control px-3 text-sm font-medium transition-colors',
-                    selected
-                      ? 'bg-brand-soft text-brand'
-                      : 'text-muted hover:bg-surface-raised hover:text-content'
-                  )}
-                >
-                  {item.label}
-                </button>
-              );
-            })}
-          </div>
+          <Tabs
+            tabsId="followups"
+            label="Follow-up window"
+            value={tab.id}
+            onChange={(id) => chooseTab(tabFromParam(id))}
+            items={TABS}
+            layoutId="followups-tab"
+          />
 
           {isAdmin && (
             <DoctorFilter

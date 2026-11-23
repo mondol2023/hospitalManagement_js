@@ -21,5 +21,6 @@ export { Pagination } from './Pagination';
 export { pageWindow } from './page-window';
 export { Skeleton, SkeletonText } from './Skeleton';
 export { Spinner } from './Spinner';
+export { Tabs, TabPanel, type TabItem } from './Tabs';
 export { Toaster } from './Toaster';
 export { toast, useToastStore, type Toast } from './toast-store';

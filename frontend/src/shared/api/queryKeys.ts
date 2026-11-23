@@ -72,6 +72,15 @@ export const queryKeys = {
     detail: (id: string) => ['medicines', 'detail', id] as const,
     lowStock: ['medicines', 'low-stock'] as const,
     expiring: (days: number) => ['medicines', 'expiring', days] as const,
+    /** Both admin reports sit under `all`, so every stock write already refreshes them. */
+    stockReport: (days: number) => ['medicines', 'stock-report', days] as const,
+    movements: (params?: Params) => ['medicines', 'movements', params ?? {}] as const,
+  },
+
+  users: {
+    all: ['users'] as const,
+    list: (params?: Params) => ['users', 'list', params ?? {}] as const,
+    detail: (id: string) => ['users', 'detail', id] as const,
   },
 
   emergencies: {

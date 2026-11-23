@@ -35,7 +35,7 @@ const phone = z
  * digit") push people towards `Passw0rd!` and buy less entropy than four more
  * characters.
  */
-const password = z.string().min(8, 'Use at least 8 characters').max(128);
+export const passwordSchema = z.string().min(8, 'Use at least 8 characters').max(128);
 
 export const loginSchema = z.object({
   email,
@@ -54,7 +54,7 @@ export const registerSchema = z
   .object({
     name: z.string().trim().min(1, 'Name is required').max(120),
     email,
-    password,
+    password: passwordSchema,
     confirmPassword: z.string(),
     phone: phone.optional().or(z.literal('')),
     address: z.string().trim().max(500).optional(),
@@ -81,7 +81,7 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, 'Enter your current password'),
-    newPassword: password,
+    newPassword: passwordSchema,
     confirmPassword: z.string(),
   })
   .refine((values) => values.newPassword === values.confirmPassword, {

@@ -148,13 +148,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: appPath('admin/staff'), label: 'Staff roster', icon: UsersRound, allow: ADMIN_ROLES, planned: true },
   { to: appPath('admin/analytics'), label: 'Analytics', icon: BarChart3, allow: ADMIN_ROLES, planned: true },
   { to: appPath('admin/broadcast'), label: 'Broadcast', icon: Megaphone, allow: ADMIN_ROLES, planned: true },
-  {
-    to: appPath('admin/pharmacy-reports'),
-    label: 'Pharmacy reports',
-    icon: PillBottle,
-    allow: ADMIN_ROLES,
-    planned: true,
-  },
+
+  { to: appPath('admin/pharmacy-reports'), label: 'Pharmacy reports', icon: PillBottle, allow: ADMIN_ROLES },
 ];
 
 function visibleFor(role: Role | null, placement: NonNullable<NavItem['placement']>): NavItem[] {

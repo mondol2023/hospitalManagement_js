@@ -95,6 +95,9 @@ const ExpiryPage = lazy(() =>
 const RevenuePage = lazy(() =>
   import('@/features/operations').then((m) => ({ default: m.RevenuePage }))
 );
+const PharmacyReportsPage = lazy(() =>
+  import('@/features/admin').then((m) => ({ default: m.PharmacyReportsPage }))
+);
 const SchedulePage = lazy(() =>
   import('@/features/doctor').then((m) => ({ default: m.SchedulePage }))
 );
@@ -305,6 +308,10 @@ export function AppRouter() {
 
             <Route element={<RequireRole allow={allowFor(appPath('pharmacy/expiry'))} />}>
               <Route path="pharmacy/expiry" element={<ExpiryPage />} />
+            </Route>
+
+            <Route element={<RequireRole allow={allowFor(appPath('admin/pharmacy-reports'))} />}>
+              <Route path="admin/pharmacy-reports" element={<PharmacyReportsPage />} />
             </Route>
 
             <Route element={<RequireRole allow={allowFor(appPath('emergencies'))} />}>

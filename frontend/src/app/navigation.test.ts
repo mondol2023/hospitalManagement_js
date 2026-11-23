@@ -204,6 +204,26 @@ describe('navigation', () => {
     });
   });
 
+  describe('pharmacy reports (phase 5a)', () => {
+    const REPORTS = '/app/admin/pharmacy-reports';
+    const ALLOWED: readonly Role[] = [ROLES.ADMIN, ROLES.MANAGER];
+
+    it('is built, and open to the admin roles only', () => {
+      const item = NAV_ITEMS.find((entry) => entry.to === REPORTS);
+      expect(item).toBeDefined();
+      expect(item?.planned).toBeFalsy();
+      expect([...(item?.allow ?? [])].sort()).toEqual([...ALLOWED].sort());
+    });
+
+    it('is in the sidebar of exactly those roles', () => {
+      for (const role of Object.values(ROLES)) {
+        const paths = navItemsFor(role).map((item) => item.to);
+        if (ALLOWED.includes(role)) expect(paths, role).toContain(REPORTS);
+        else expect(paths, role).not.toContain(REPORTS);
+      }
+    });
+  });
+
   describe('expiry (phase 4d)', () => {
     const EXPIRY = '/app/pharmacy/expiry';
     const ALLOWED: readonly Role[] = [ROLES.PHARMACIST, ROLES.ADMIN, ROLES.MANAGER];

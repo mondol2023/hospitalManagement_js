@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { balanceCents, formatMoney } from './money';
+import { balanceCents, formatMoney, fromCents, toCents } from './money';
 
 describe('formatMoney', () => {
   it('shows integer cents as a two-decimal amount', () => {
@@ -43,5 +43,19 @@ describe('balanceCents', () => {
 
   it('never goes negative on an overpaid bill', () => {
     expect(balanceCents({ totalCents: 1000, paidCents: 1500 })).toBe(0);
+  });
+});
+
+describe('toCents / fromCents', () => {
+  it('round-trips a typed amount without float drift', () => {
+    expect(toCents('0.10')).toBe(10);
+    expect(toCents('1,250.00')).toBe(125000);
+    expect(fromCents(125000)).toBe('1250.00');
+    expect(fromCents(toCents('19.99')!)).toBe('19.99');
+  });
+
+  it('returns null for text that is not an amount', () => {
+    expect(toCents('')).toBeNull();
+    expect(toCents('abc')).toBeNull();
   });
 });

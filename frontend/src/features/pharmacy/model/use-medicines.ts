@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { ApiError } from '@/shared/api/envelope';
 import { queryKeys } from '@/shared/api/queryKeys';
+import { useInvalidatingMutation } from '@/shared/api/use-invalidating-mutation';
 import { toast } from '@/shared/ui';
 
 import {
@@ -23,19 +24,11 @@ import {
  */
 function useMedicineMutation<TVariables, TData>(
   mutationFn: (variables: TVariables) => Promise<TData>,
-  { success, failure }: { success: string; failure: string }
+  messages: { success: string; failure: string }
 ) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.medicines.all });
-      toast.success(success);
-    },
-    onError: (error: unknown) => {
-      toast.error(error instanceof ApiError ? error.userMessage : failure);
-    },
+  return useInvalidatingMutation(mutationFn, {
+    invalidate: [queryKeys.medicines.all],
+    ...messages,
   });
 }
 
