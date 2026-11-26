@@ -7,10 +7,12 @@ const schemas = require('../validators/staff');
 const controller = require('../controllers/staffController');
 
 /**
- * Employment terms — `salaryCents` above all — are behind `requireAdmin`, and
- * the directory listing never projects them. `/me` reaches only the caller's own
- * profile, so the self-service and administrative paths cannot be confused for
- * one another.
+ * `salaryCents` is write-only through this API: no read here returns it (the
+ * service excludes it at the query — see `PRIVATE_PROJECTION` in staffService).
+ * The only response that includes it is `PATCH /:id/employment`, which is behind
+ * `requireAdmin` and echoes back the value the caller just set. `/me` reaches
+ * only the caller's own profile, so the self-service and administrative paths
+ * cannot be confused for one another.
  */
 const router = express.Router();
 

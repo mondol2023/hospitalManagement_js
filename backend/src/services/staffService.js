@@ -4,6 +4,13 @@ const { staffRepository } = require('../repositories');
 const ApiError = require('../utils/ApiError');
 
 /**
+ * Repository reads are lean, so the model's `toJSON` plugin never runs and
+ * `private: true` on a schema field would not hide it. Pay is excluded here, at
+ * the query, on every read path.
+ */
+const PRIVATE_PROJECTION = '-salaryCents';
+
+/**
  * Non-clinical employees — receptionists, pharmacists, accountants, managers and
  * administrators — all in one collection discriminated by `role`.
  *
@@ -21,12 +28,14 @@ class StaffService {
     if (query.role) filter.role = query.role;
     if (query.department) filter.department = query.department;
     return this.staff.paginate(filter, query, {
+      projection: PRIVATE_PROJECTION,
       populate: { path: 'user', select: 'name email phone' },
     });
   }
 
   async getByUser(userId) {
     const profile = await this.staff.findByUser(userId, {
+      projection: PRIVATE_PROJECTION,
       populate: { path: 'user', select: 'name email phone profilePic' },
     });
     if (!profile) throw ApiError.notFound('Staff profile');
@@ -52,8 +61,8 @@ class StaffService {
   }
 
   /**
-   * Employment terms. `salaryCents` lives behind this admin-only path and is
-   * never returned by the directory listing above.
+   * Employment terms. `salaryCents` is set here, behind the admin-only route,
+   * and returned only in this response — no read above projects it.
    */
   async updateEmployment(staffProfileId, patch = {}) {
     const allowed = ['designation', 'employmentType', 'reportsTo', 'salaryCents', 'department'];
