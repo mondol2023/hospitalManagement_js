@@ -29,6 +29,18 @@ class DoctorRepository extends BaseRepository {
     );
   }
 
+  /**
+   * The roster page: same shape as the directory, but whatever `isActive` and
+   * `isAcceptingPatients` the caller put in `filter` is respected, and none is
+   * forced. Only the service, after checking the caller is an administrator,
+   * may reach this.
+   */
+  listForAdmin(filter = {}, query = {}) {
+    return this.paginate(filter, query, {
+      populate: { path: 'user', select: 'name email profilePic' },
+    });
+  }
+
   specializations() {
     return this.model.distinct('specialization', { isActive: true }).exec();
   }

@@ -3,6 +3,7 @@
 const { nurseRepository, patientRepository } = require('../repositories');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
+const rosterScope = require('../utils/rosterScope');
 
 /**
  * Nursing roster: who works which ward, who is on the floor right now.
@@ -18,8 +19,11 @@ class NurseService {
     this.patients = patients;
   }
 
-  list(query = {}) {
-    const filter = { ...this.nurses.searchFilter(query.search), isActive: true };
+  /** Active nurses for everyone; an administrator may widen it with `status`. */
+  list(query = {}, actor) {
+    const { isActive } = rosterScope(query, actor);
+    const filter = { ...this.nurses.searchFilter(query.search) };
+    if (isActive !== undefined) filter.isActive = isActive;
     if (query.ward) filter.assignedWards = query.ward;
     if (query.grade) filter.grade = query.grade;
     if (query.onDuty !== undefined) {

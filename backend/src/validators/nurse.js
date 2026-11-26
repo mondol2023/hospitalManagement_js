@@ -1,6 +1,15 @@
 'use strict';
 
-const { z, objectId, idParam, listQuery, shortText, boolish, nonEmptyPatch } = require('./common');
+const {
+  z,
+  objectId,
+  idParam,
+  listQuery,
+  shortText,
+  boolish,
+  rosterStatus,
+  nonEmptyPatch,
+} = require('./common');
 const { nurseProfile } = require('./profiles');
 
 /**
@@ -39,6 +48,7 @@ const list = {
     ward: shortText(60).optional(),
     grade: nurseProfile.shape.grade,
     onDuty: boolish.optional(),
+    status: rosterStatus.optional(),
   }),
 };
 

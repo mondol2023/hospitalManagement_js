@@ -3,7 +3,7 @@
 const handle = require('../utils/handle');
 const staffService = require('../services/staffService');
 
-const list = handle.page((req) => staffService.list(req.query));
+const list = handle.page((req) => staffService.list(req.query, req.user));
 
 const me = handle((req) => staffService.getByUser(req.user.id));
 

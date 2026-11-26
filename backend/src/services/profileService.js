@@ -56,6 +56,15 @@ class ProfileService {
   }
 
   /**
+   * @param {string} role
+   * @returns {string} name of the model holding this role's profile — two roles
+   *   with the same value share one collection (and one row per user)
+   */
+  modelFor(role) {
+    return ROLE_PROFILE_MODEL[role];
+  }
+
+  /**
    * Employee numbers must be unique and are usually issued by HR. When a caller
    * omits one we mint a collision-resistant value rather than rejecting the
    * request — a random suffix, not a counter, because a counter document would

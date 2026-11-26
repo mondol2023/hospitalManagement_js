@@ -3,7 +3,7 @@
 const handle = require('../utils/handle');
 const nurseService = require('../services/nurseService');
 
-const list = handle.page((req) => nurseService.list(req.query));
+const list = handle.page((req) => nurseService.list(req.query, req.user));
 
 const me = handle((req) => nurseService.getByUser(req.user.id));
 

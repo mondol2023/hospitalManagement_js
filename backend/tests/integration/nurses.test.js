@@ -28,3 +28,31 @@ describe('nurses — on duty in a ward', () => {
     expect(String(items[0].user._id || items[0].user.id)).toBe(String(onDuty.user._id));
   });
 });
+
+describe('nurses — status filter is for administrators', () => {
+  const idOf = (doc) => String(doc._id || doc.id);
+
+  it('lets an administrator list deactivated nurses with status=inactive', async () => {
+    const admin = await createActor(ROLES.ADMIN);
+    const gone = await createActor(ROLES.NURSE, { profile: { isActive: false } });
+    const here = await createActor(ROLES.NURSE);
+
+    const res = await api().get(url('/nurses?status=inactive&limit=100')).set(admin.headers);
+    const ids = expectOk(res).map(idOf);
+
+    expect(ids).toContain(String(gone.profile.id));
+    expect(ids).not.toContain(String(here.profile.id));
+  });
+
+  it('gives a doctor the active list even when they ask for inactive', async () => {
+    const doctor = await createActor(ROLES.DOCTOR);
+    const gone = await createActor(ROLES.NURSE, { profile: { isActive: false } });
+    const here = await createActor(ROLES.NURSE);
+
+    const res = await api().get(url('/nurses?status=inactive&limit=100')).set(doctor.headers);
+    const ids = expectOk(res).map(idOf);
+
+    expect(ids).toContain(String(here.profile.id));
+    expect(ids).not.toContain(String(gone.profile.id));
+  });
+});

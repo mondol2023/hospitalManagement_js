@@ -61,6 +61,17 @@ class UserRepository extends BaseRepository {
     return this.model.updateOne({ _id: id }, { $set: { tokensValidFrom: new Date() } }).exec();
   }
 
+  /**
+   * Active accounts matching `filter`. Takes a session so a guard such as "never
+   * remove the last administrator" can count inside the transaction that writes.
+   */
+  countActive(filter = {}, { session } = {}) {
+    return this.model
+      .countDocuments({ ...filter, isActive: true })
+      .session(session || null)
+      .exec();
+  }
+
   countByRole() {
     return this.aggregate([
       { $match: { isActive: true } },

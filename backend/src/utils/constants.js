@@ -54,6 +54,14 @@ const ROLE_PROFILE_MODEL = Object.freeze({
   [ROLES.ADMIN]: 'Staff',
 });
 
+/**
+ * Roles whose profile lives in the `Staff` collection. Doctors and nurses have
+ * their own collections, so `GET /staff?role=doctor` could only ever be empty.
+ */
+const STAFF_PROFILE_ROLES = Object.freeze(
+  Object.keys(ROLE_PROFILE_MODEL).filter((role) => ROLE_PROFILE_MODEL[role] === 'Staff')
+);
+
 const SHIFTS = Object.freeze({
   MORNING: 'morning',
   EVENING: 'evening',
@@ -299,6 +307,7 @@ module.exports = {
   ADMIN_ROLES,
   INVENTORY_ROLES,
   ROLE_PROFILE_MODEL,
+  STAFF_PROFILE_ROLES,
   SHIFTS,
   SHIFT_VALUES,
   APPOINTMENT_STATUS,

@@ -49,6 +49,12 @@ const boolish = z
   .transform((value) => value === true || value === 'true');
 
 /**
+ * Roster filter on staff, nurse and doctor lists. Only administrators are
+ * served anything but `active`; the service ignores it for everyone else.
+ */
+const rosterStatus = z.enum(['active', 'inactive', 'all']);
+
+/**
  * Paging and sorting, plus whatever filters the endpoint declares.
  *
  * `limit` is capped here as well as in `parsePagination` so an out-of-range page
@@ -89,6 +95,7 @@ module.exports = {
   minorUnits,
   positiveInt,
   boolish,
+  rosterStatus,
   listQuery,
   dateRange,
   nonEmptyPatch,

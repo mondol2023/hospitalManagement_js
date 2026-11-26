@@ -359,6 +359,58 @@ describe('users — changing a role migrates the profile', () => {
     expect(after.getTime()).toBeGreaterThan(before.getTime());
   });
 
+  it('keeps the staff profile, and its employee id, when one staff role becomes another', async () => {
+    const admin = await createActor(ROLES.ADMIN);
+    const receptionist = await createActor(ROLES.RECEPTIONIST, {
+      profile: { designation: 'Front Desk', department: 'Admissions' },
+    });
+    const before = (await User.findById(receptionist.user._id)).tokensValidFrom;
+
+    const updated = expectOk(
+      await api()
+        .patch(url(`/users/${receptionist.user._id}/role`))
+        .set(admin.headers)
+        .send({ role: ROLES.PHARMACIST, profile: { designation: 'Dispensing Lead' } })
+    );
+
+    expect(updated.role).toBe(ROLES.PHARMACIST);
+
+    // Receptionist and pharmacist share the Staff collection. The old code found
+    // that row, skipped creation, then deleted it — leaving a pharmacist with no
+    // profile at all.
+    const rows = await Staff.find({ user: receptionist.user._id });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].role).toBe(ROLES.PHARMACIST);
+    expect(rows[0].designation).toBe('Dispensing Lead');
+    // Same row, same person: the number they were issued does not change.
+    expect(rows[0].employeeId).toBe(receptionist.profile.employeeId);
+    expect(String(rows[0]._id)).toBe(String(receptionist.profile._id));
+    // Fields the request did not mention are left as they were.
+    expect(rows[0].department).toBe('Admissions');
+
+    const after = (await User.findById(receptionist.user._id)).tokensValidFrom;
+    expect(after.getTime()).toBeGreaterThan(before.getTime());
+  });
+
+  it('recreates the staff profile when a staff account has lost its row', async () => {
+    const admin = await createActor(ROLES.ADMIN);
+    const receptionist = await createActor(ROLES.RECEPTIONIST);
+    // The state the old bug left behind.
+    await Staff.deleteMany({ user: receptionist.user._id });
+
+    expectOk(
+      await api()
+        .patch(url(`/users/${receptionist.user._id}/role`))
+        .set(admin.headers)
+        .send({ role: ROLES.ACCOUNTANT, profile: { designation: 'Ledger Clerk' } })
+    );
+
+    const rows = await Staff.find({ user: receptionist.user._id });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].role).toBe(ROLES.ACCOUNTANT);
+    expect(rows[0].employeeId).toMatch(/^ACC-[0-9A-F]{8}$/);
+  });
+
   it('treats a change to the current role as a no-op and keeps sessions alive', async () => {
     const admin = await createActor(ROLES.ADMIN);
     const nurse = await createActor(ROLES.NURSE);
@@ -465,6 +517,138 @@ describe('users — deactivation', () => {
       'VALIDATION_ERROR'
     );
     expect((await User.findById(nurse.user._id)).isActive).toBe(true);
+  });
+});
+
+describe('users — guarding access changes', () => {
+  const rolePatch = (target, actor, body) =>
+    api().patch(url(`/users/${target.user._id}/role`)).set(actor.headers).send(body);
+  const activePatch = (target, actor, isActive) =>
+    api().patch(url(`/users/${target.user._id}/active`)).set(actor.headers).send({ isActive });
+
+  it('stops an administrator changing their own role', async () => {
+    const admin = await createActor(ROLES.ADMIN);
+
+    const res = await rolePatch(admin, admin, {
+      role: ROLES.NURSE,
+      profile: { qualifications: 'RN' },
+    });
+
+    expectError(res, 403, 'SELF_LOCKOUT');
+    expect((await User.findById(admin.user._id)).role).toBe(ROLES.ADMIN);
+    expect(await Nurse.countDocuments({ user: admin.user._id })).toBe(0);
+  });
+
+  it('stops an administrator deactivating themselves, and keeps their session', async () => {
+    const admin = await createActor(ROLES.ADMIN);
+
+    expectError(await activePatch(admin, admin, false), 403, 'SELF_LOCKOUT');
+
+    expect((await User.findById(admin.user._id)).isActive).toBe(true);
+    expectOk(await api().get(url('/auth/me')).set(admin.headers));
+  });
+
+  it('checks "self" before "admin only", so a manager cannot promote themselves', async () => {
+    const manager = await createActor(ROLES.MANAGER);
+
+    const res = await rolePatch(manager, manager, {
+      role: ROLES.ADMIN,
+      profile: { designation: 'Self-appointed' },
+    });
+
+    expectError(res, 403, 'SELF_LOCKOUT');
+    expect((await User.findById(manager.user._id)).role).toBe(ROLES.MANAGER);
+  });
+
+  it('stops a manager promoting someone else to administrator', async () => {
+    const manager = await createActor(ROLES.MANAGER);
+    const nurse = await createActor(ROLES.NURSE);
+
+    const res = await rolePatch(nurse, manager, {
+      role: ROLES.ADMIN,
+      profile: { designation: 'Promoted by a manager' },
+    });
+
+    expectError(res, 403, 'ADMIN_GRANT_REQUIRED');
+    expect((await User.findById(nurse.user._id)).role).toBe(ROLES.NURSE);
+    expect(await Staff.countDocuments({ user: nurse.user._id })).toBe(0);
+  });
+
+  it('stops a manager deactivating an administrator', async () => {
+    const manager = await createActor(ROLES.MANAGER);
+    const admin = await createActor(ROLES.ADMIN);
+
+    expectError(await activePatch(admin, manager, false), 403, 'ADMIN_GRANT_REQUIRED');
+
+    expect((await User.findById(admin.user._id)).isActive).toBe(true);
+  });
+
+  it('stops a manager reactivating an administrator', async () => {
+    const manager = await createActor(ROLES.MANAGER);
+    const admin = await createActor(ROLES.ADMIN, { user: { isActive: false } });
+
+    expectError(await activePatch(admin, manager, true), 403, 'ADMIN_GRANT_REQUIRED');
+
+    expect((await User.findById(admin.user._id)).isActive).toBe(false);
+  });
+
+  it('refuses a manager even when the change would be a no-op', async () => {
+    const manager = await createActor(ROLES.MANAGER);
+    const admin = await createActor(ROLES.ADMIN);
+
+    // The API must not confirm the shape of a request it would otherwise refuse.
+    const res = await rolePatch(admin, manager, {
+      role: ROLES.ADMIN,
+      profile: { designation: 'Same' },
+    });
+
+    expectError(res, 403, 'ADMIN_GRANT_REQUIRED');
+  });
+
+  it('still lets a manager manage everyone who is not an administrator', async () => {
+    const manager = await createActor(ROLES.MANAGER);
+    const nurse = await createActor(ROLES.NURSE);
+
+    expectOk(await activePatch(nurse, manager, false));
+    expectOk(await activePatch(nurse, manager, true));
+    expect((await User.findById(nurse.user._id)).isActive).toBe(true);
+  });
+
+  it('lets an administrator promote a manager to administrator', async () => {
+    const admin = await createActor(ROLES.ADMIN);
+    const manager = await createActor(ROLES.MANAGER);
+
+    const updated = expectOk(
+      await rolePatch(manager, admin, {
+        role: ROLES.ADMIN,
+        profile: { designation: 'Head of Operations' },
+      })
+    );
+
+    expect(updated.role).toBe(ROLES.ADMIN);
+  });
+
+  it('lets one of two administrators demote the other, leaving one', async () => {
+    const admin = await createActor(ROLES.ADMIN);
+    const other = await createActor(ROLES.ADMIN);
+
+    expectOk(
+      await rolePatch(other, admin, {
+        role: ROLES.MANAGER,
+        profile: { designation: 'Stepped down' },
+      })
+    );
+
+    expect(await User.countDocuments({ role: ROLES.ADMIN, isActive: true })).toBe(1);
+  });
+
+  it('lets one of two administrators deactivate the other', async () => {
+    const admin = await createActor(ROLES.ADMIN);
+    const other = await createActor(ROLES.ADMIN);
+
+    expectOk(await activePatch(other, admin, false));
+
+    expect((await User.findById(other.user._id)).isActive).toBe(false);
   });
 });
 

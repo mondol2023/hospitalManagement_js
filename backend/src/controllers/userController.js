@@ -12,10 +12,12 @@ const getById = handle((req) => userService.getById(req.params.id));
 const update = handle((req) => userService.update(req.params.id, req.body));
 
 const changeRole = handle((req) =>
-  userService.changeRole(req.params.id, req.body.role, req.body.profile)
+  userService.changeRole(req.params.id, req.body.role, req.body.profile, req.user)
 );
 
-const setActive = handle((req) => userService.setActive(req.params.id, req.body.isActive));
+const setActive = handle((req) =>
+  userService.setActive(req.params.id, req.body.isActive, req.user)
+);
 
 const statistics = handle(() => userService.statistics());
 

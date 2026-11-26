@@ -2,7 +2,9 @@
 
 const { doctorRepository, appointmentRepository } = require('../repositories');
 const ApiError = require('../utils/ApiError');
+const logger = require('../config/logger');
 const cacheService = require('./cacheService');
+const rosterScope = require('../utils/rosterScope');
 
 const CACHE_PREFIX = 'doctors';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -20,13 +22,25 @@ class DoctorService {
     this.ns = cache.namespace(CACHE_PREFIX);
   }
 
-  /** Public "find a doctor" listing. Cached — it is read constantly, written rarely. */
-  async list(query = {}) {
+  /**
+   * "Find a doctor" listing. Cached — it is read constantly, written rarely.
+   *
+   * Everyone gets active doctors who are taking patients. An administrator may
+   * ask for `status` and `accepting` to see the whole roster. The cache key
+   * carries the scope and both effective values: without them an
+   * administrator's `status=all` page would be served to a patient who sent the
+   * same query string.
+   */
+  async list(query = {}, actor) {
+    const scope = rosterScope(query, actor);
     const filter = { ...this.doctors.searchFilter(query.search) };
     if (query.specialization) filter.specialization = query.specialization;
     if (query.department) filter.department = query.department;
 
     const key = this.ns.key('list', {
+      scope: scope.admin ? 'admin' : 'public',
+      status: scope.status,
+      accepting: scope.accepting,
       specialization: query.specialization,
       department: query.department,
       search: query.search,
@@ -35,7 +49,13 @@ class DoctorService {
       sort: query.sort,
     });
 
-    return this.cache.wrap(key, () => this.doctors.listAvailable(filter, query));
+    return this.cache.wrap(key, () => {
+      if (!scope.admin) return this.doctors.listAvailable(filter, query);
+
+      if (scope.isActive !== undefined) filter.isActive = scope.isActive;
+      if (scope.accepting !== undefined) filter.isAcceptingPatients = scope.accepting;
+      return this.doctors.listForAdmin(filter, query);
+    });
   }
 
   async getById(doctorProfileId) {
@@ -88,6 +108,28 @@ class DoctorService {
 
     await this.ns.invalidate();
     return doctor;
+  }
+
+  /**
+   * An administrator setting where a doctor works and whether they take new
+   * patients. Only these three fields are copied: clinical fields belong to the
+   * doctor (`updateOwnProfile`).
+   */
+  async updateEmployment(doctorProfileId, patch = {}) {
+    const update = {};
+    for (const field of ['department', 'shift', 'isAcceptingPatients']) {
+      if (patch[field] !== undefined) update[field] = patch[field];
+    }
+
+    const updated = await this.doctors.updateById(doctorProfileId, { $set: update });
+    if (!updated) throw ApiError.notFound('Doctor');
+
+    // The directory and the specialisation list are cached.
+    await this.ns.invalidate();
+    logger.info('Doctor employment updated', { doctorProfileId: String(doctorProfileId) });
+
+    // Same shape as `GET /doctors/:id`, with the account details populated.
+    return this.getById(doctorProfileId);
   }
 
   async setDuty(userId, isOnDuty) {

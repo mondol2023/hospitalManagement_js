@@ -10,6 +10,55 @@ const cacheService = require('./cacheService');
 
 const CACHE_PREFIX = 'users';
 
+/** Fields of the shared `Staff` profile a role change may overwrite. `employeeId` is deliberately absent. */
+const STAFF_PROFILE_FIELDS = Object.freeze([
+  'designation',
+  'employmentType',
+  'reportsTo',
+  'salaryCents',
+  'notes',
+  'department',
+  'shift',
+]);
+
+/**
+ * Checks 1 and 2 of the access-change guard. Both depend only on who is asking
+ * and who is affected, so they run before anything is read or written.
+ *
+ * `actor` is required: a caller that cannot say who it is acting for must not be
+ * able to skip the guard by leaving the argument out.
+ */
+function assertActorMayChangeAccess(actor, userId, { touchesAdmin }) {
+  if (!actor) throw ApiError.forbidden('Acting user is required', { code: 'ACTOR_REQUIRED' });
+
+  // Checked first, so a manager promoting themselves is a self-lockout rather
+  // than a missing-privilege error that suggests asking someone else would work.
+  if (String(userId) === String(actor.id)) {
+    throw ApiError.forbidden(
+      "You can't change your own role or deactivate your own account. Ask another administrator.",
+      { code: 'SELF_LOCKOUT' }
+    );
+  }
+
+  // Managers pass `requireAdmin`, but the admin role itself stays with admins.
+  if (touchesAdmin && actor.role !== ROLES.ADMIN) {
+    throw ApiError.forbidden("Only an administrator can change another administrator's access.", {
+      code: 'ADMIN_GRANT_REQUIRED',
+    });
+  }
+}
+
+/** Check 3: refuses a write that would leave the hospital with no active administrator. */
+async function assertAnotherAdminRemains(users, { session } = {}) {
+  const activeAdmins = await users.countActive({ role: ROLES.ADMIN }, { session });
+  if (activeAdmins <= 1) {
+    throw ApiError.conflict(
+      'This is the last active administrator. Make someone else an administrator first.',
+      { code: 'LAST_ADMIN' }
+    );
+  }
+}
+
 /** Administrative account management — the counterpart to `authService`. */
 class UserService {
   constructor({ users = userRepository, profiles = profileService, cache = cacheService } = {}) {
@@ -110,23 +159,54 @@ class UserService {
    * Moves an account to a different role, creating the new profile and retiring
    * the old one in the same unit of work.
    */
-  async changeRole(userId, nextRole, profile = {}) {
+  async changeRole(userId, nextRole, profile = {}, actor) {
     if (!ROLE_VALUES.includes(nextRole)) {
       throw ApiError.badRequest(`Unknown role "${nextRole}"`, { code: 'UNKNOWN_ROLE' });
     }
 
     const current = await this.users.findByIdOrThrow(userId, 'User');
+    // Runs even for a no-op, so the API never confirms the shape of a request it
+    // would refuse from this caller.
+    assertActorMayChangeAccess(actor, userId, {
+      touchesAdmin: current.role === ROLES.ADMIN || nextRole === ROLES.ADMIN,
+    });
     if (current.role === nextRole) return current;
 
+    const removesActiveAdmin = current.role === ROLES.ADMIN && current.isActive !== false;
+    const sameModel = this.profiles.modelFor(current.role) === this.profiles.modelFor(nextRole);
+
     const updated = await withTransaction(async (session) => {
-      const existing = await this.profiles.findByUser(userId, nextRole);
-      if (!existing) {
-        await this.profiles.createProfile({ userId, role: nextRole, profile }, { session });
-      }
-      // The previous profile is dropped rather than kept: a stale Doctor row
-      // would keep the user in specialist searches after they stop practising.
-      if (current.role !== ROLES.PATIENT) {
-        await this.profiles.deleteForUser(userId, current.role, { session });
+      // Counted inside the transaction that writes, where the deployment has one.
+      // On a standalone dev database two admins demoting each other in the same
+      // instant could both pass; that race is accepted.
+      if (removesActiveAdmin) await assertAnotherAdminRemains(this.users, { session });
+
+      if (sameModel) {
+        // Staff → staff: both roles live in one row, so update it in place.
+        // Creating the "new" profile and deleting the "old" one would find and
+        // then delete the same row. The person keeps their `employeeId`, so an
+        // id minted as `REC-…` stays `REC-…` after a move to pharmacist.
+        const patch = { role: nextRole };
+        for (const field of STAFF_PROFILE_FIELDS) {
+          if (profile[field] !== undefined) patch[field] = profile[field];
+        }
+        const kept = await this.profiles
+          .repositoryFor(nextRole)
+          .updateOne({ user: userId }, { $set: patch }, { session });
+        // No row means the account was damaged by the old behaviour; rebuild it.
+        if (!kept) {
+          await this.profiles.createProfile({ userId, role: nextRole, profile }, { session });
+        }
+      } else {
+        const existing = await this.profiles.findByUser(userId, nextRole);
+        if (!existing) {
+          await this.profiles.createProfile({ userId, role: nextRole, profile }, { session });
+        }
+        // The previous profile is dropped rather than kept: a stale Doctor row
+        // would keep the user in specialist searches after they stop practising.
+        if (current.role !== ROLES.PATIENT) {
+          await this.profiles.deleteForUser(userId, current.role, { session });
+        }
       }
       return this.users.updateById(userId, { $set: { role: nextRole } }, { session });
     });
@@ -140,8 +220,17 @@ class UserService {
   }
 
   /** Soft delete. Records are never removed — clinical history must survive staff turnover. */
-  async setActive(userId, isActive) {
-    const user = await this.users.updateById(userId, { $set: { isActive } });
+  async setActive(userId, isActive, actor) {
+    const target = await this.users.findByIdOrThrow(userId, 'User');
+    assertActorMayChangeAccess(actor, userId, { touchesAdmin: target.role === ROLES.ADMIN });
+
+    const removesActiveAdmin =
+      target.role === ROLES.ADMIN && target.isActive !== false && !isActive;
+
+    const user = await withTransaction(async (session) => {
+      if (removesActiveAdmin) await assertAnotherAdminRemains(this.users, { session });
+      return this.users.updateById(userId, { $set: { isActive } }, { session });
+    });
     if (!user) throw ApiError.notFound('User');
 
     if (!isActive) await this.users.revokeTokens(userId);

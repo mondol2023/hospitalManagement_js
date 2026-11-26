@@ -1,7 +1,7 @@
 'use strict';
 
-const { z, objectId, idParam, listQuery, nonEmptyPatch } = require('./common');
-const { STAFF_ROLES } = require('../utils/constants');
+const { z, objectId, idParam, listQuery, rosterStatus, nonEmptyPatch } = require('./common');
+const { STAFF_PROFILE_ROLES } = require('../utils/constants');
 const { staffProfile } = require('./profiles');
 
 /**
@@ -30,8 +30,9 @@ const updateEmployment = {
 const list = {
   query: listQuery({
     search: z.string().trim().max(120).optional(),
-    role: z.enum(STAFF_ROLES).optional(),
+    role: z.enum(STAFF_PROFILE_ROLES).optional(),
     department: z.string().trim().max(120).optional(),
+    status: rosterStatus.optional(),
   }),
 };
 

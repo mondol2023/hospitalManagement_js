@@ -2,6 +2,7 @@
 
 const { staffRepository } = require('../repositories');
 const ApiError = require('../utils/ApiError');
+const rosterScope = require('../utils/rosterScope');
 
 /**
  * Repository reads are lean, so the model's `toJSON` plugin never runs and
@@ -23,8 +24,11 @@ class StaffService {
     this.staff = staff;
   }
 
-  list(query = {}) {
-    const filter = { ...this.staff.searchFilter(query.search), isActive: true };
+  /** Active staff for everyone; an administrator may widen it with `status`. */
+  list(query = {}, actor) {
+    const { isActive } = rosterScope(query, actor);
+    const filter = { ...this.staff.searchFilter(query.search) };
+    if (isActive !== undefined) filter.isActive = isActive;
     if (query.role) filter.role = query.role;
     if (query.department) filter.department = query.department;
     return this.staff.paginate(filter, query, {

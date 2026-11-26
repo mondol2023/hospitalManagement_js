@@ -1,6 +1,15 @@
 'use strict';
 
-const { z, objectId, idParam, listQuery, dateValue, nonEmptyPatch } = require('./common');
+const {
+  z,
+  objectId,
+  idParam,
+  listQuery,
+  dateValue,
+  boolish,
+  rosterStatus,
+  nonEmptyPatch,
+} = require('./common');
 const { doctorProfile } = require('./profiles');
 
 /**
@@ -13,11 +22,25 @@ const updateOwn = {
   body: nonEmptyPatch(doctorProfile.omit({ employeeId: true }).partial()),
 };
 
+/**
+ * Employment is what an administrator controls about a doctor: where they work,
+ * when, and whether they take new patients. Clinical fields stay in `updateOwn`.
+ * Unknown keys are stripped by zod, so a fee sent here is dropped, not applied.
+ */
+const updateEmployment = {
+  params: idParam(),
+  body: nonEmptyPatch(
+    doctorProfile.pick({ department: true, shift: true, isAcceptingPatients: true }).partial()
+  ),
+};
+
 const list = {
   query: listQuery({
     search: z.string().trim().max(120).optional(),
     specialization: z.string().trim().max(120).optional(),
     department: z.string().trim().max(120).optional(),
+    status: rosterStatus.optional(),
+    accepting: boolish.optional(),
   }),
 };
 
@@ -32,4 +55,4 @@ const availability = {
 
 const setDuty = { body: z.object({ isOnDuty: z.boolean() }) };
 
-module.exports = { list, byId, byUser, updateOwn, availability, setDuty };
+module.exports = { list, byId, byUser, updateOwn, updateEmployment, availability, setDuty };
