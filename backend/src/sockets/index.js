@@ -21,8 +21,11 @@ const { registerCareHandlers } = require('./careGateway');
 
 /** Rooms a socket is placed in the moment it authenticates. */
 function roomsFor(actor) {
-  const rooms = [SOCKET_ROOMS.user(actor.id), SOCKET_ROOMS.role(actor.role)];
-  if (accessPolicy.isStaff(actor.role)) rooms.push(SOCKET_ROOMS.staff());
+  const rooms = [SOCKET_ROOMS.user(actor.id)];
+  // No organisation (platform admin) means no shared rooms at all.
+  if (!actor.organizationId) return rooms;
+  rooms.push(SOCKET_ROOMS.role(actor.organizationId, actor.role));
+  if (accessPolicy.isStaff(actor.role)) rooms.push(SOCKET_ROOMS.staff(actor.organizationId));
   return rooms;
 }
 
@@ -84,14 +87,17 @@ async function authenticateSocket(socket, next) {
 const SESSION_RECHECK_MS = 60_000;
 
 // A socket is authenticated once, so re-check on an interval: drop it if the
-// token expired, was revoked, the account was disabled, or the role changed
+// token expired, was revoked, the account was disabled, the organisation was
+// suspended, branch access was revoked, or the role or organisation changed
 // (rooms were chosen from the old role; the client reconnects and gets new ones).
 // Infrastructure errors keep the socket: a database blip must not mass-disconnect.
 function watchSession(socket, { resolve = resolveActor, intervalMs = SESSION_RECHECK_MS } = {}) {
   const timer = setInterval(async () => {
     try {
       const actor = await resolve(socket.data.token);
-      if (actor.role !== socket.data.user.role) socket.disconnect(true);
+      const current = socket.data.user;
+      const moved = String(actor.organizationId ?? '') !== String(current.organizationId ?? '');
+      if (actor.role !== current.role || moved) socket.disconnect(true);
     } catch (error) {
       if (error instanceof ApiError) socket.disconnect(true);
       else logger.warn('Socket session re-check failed', { error: error.message });

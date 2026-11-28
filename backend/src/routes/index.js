@@ -18,6 +18,10 @@ const emergencyRoutes = require('./emergencyRoutes');
 const chatRoutes = require('./chatRoutes');
 const notificationRoutes = require('./notificationRoutes');
 const analyticsRoutes = require('./analyticsRoutes');
+const organizationRoutes = require('./organizationRoutes');
+const branchRoutes = require('./branchRoutes');
+const departmentRoutes = require('./departmentRoutes');
+const platformRoutes = require('./platformRoutes');
 
 /**
  * The API surface, in one place.
@@ -50,6 +54,10 @@ const routes = [
   { path: '/chat', router: chatRoutes },
   { path: '/notifications', router: notificationRoutes },
   { path: '/analytics', router: analyticsRoutes },
+  { path: '/organization', router: organizationRoutes },
+  { path: '/branches', router: branchRoutes },
+  { path: '/departments', router: departmentRoutes },
+  { path: '/platform', router: platformRoutes },
 ];
 
 routes.forEach((route) => router.use(route.path, route.router));

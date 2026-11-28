@@ -1,6 +1,7 @@
 'use strict';
 
 const { ROLES, APPOINTMENT_STATUS, BILL_STATUS } = require('../../utils/constants');
+const context = require('../../utils/context');
 const { METRICS } = require('./metrics');
 const { shapeOccupancy } = require('./occupancy');
 
@@ -19,7 +20,7 @@ function createCollectors({
   async function census() {
     const [total, admitted, staffRows] = await Promise.all([
       patients.count({}),
-      patients.count({ isAdmitted: true }),
+      patients.count({ isAdmitted: true, admittedBranch: context.activeBranchId() }),
       users.countByRole(),
     ]);
 

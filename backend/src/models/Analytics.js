@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 
 /**
  * Pre-aggregated metric snapshots.
@@ -32,11 +33,12 @@ const analyticsSchema = new mongoose.Schema(
 );
 
 analyticsSchema.plugin(toJSONPlugin);
+analyticsSchema.plugin(tenantScoped, { scope: 'branch' });
 
 // --- Indexes ---------------------------------------------------------------
 // Time-series read: one metric over a date range.
-analyticsSchema.index({ metric: 1, period: 1, recordedAt: -1 });
+analyticsSchema.index({ organization: 1, branch: 1, metric: 1, period: 1, recordedAt: -1 });
 // Idempotent snapshot writes — re-running a rollup overwrites its bucket.
-analyticsSchema.index({ metric: 1, period: 1, recordedAt: 1 }, { unique: true });
+analyticsSchema.index({ organization: 1, branch: 1, metric: 1, period: 1, recordedAt: 1 }, { unique: true });
 
 module.exports = mongoose.model('Analytics', analyticsSchema);

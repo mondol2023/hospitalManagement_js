@@ -28,6 +28,7 @@ class ConversationRepository extends BaseRepository {
       populate: [
         { path: 'participants', select: 'name role profilePic' },
         { path: 'patient', select: 'medicalRecordNumber ward' },
+        { path: 'department', select: 'name' },
       ],
     });
   }

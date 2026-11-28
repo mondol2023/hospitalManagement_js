@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 
 /**
  * One message inside a `Conversation`.
@@ -52,14 +53,15 @@ const messageSchema = new mongoose.Schema(
 );
 
 messageSchema.plugin(toJSONPlugin);
+messageSchema.plugin(tenantScoped, { scope: 'organization' });
 
 // --- Indexes ---------------------------------------------------------------
 // Paged thread history, newest first. The only read path that matters.
-messageSchema.index({ conversation: 1, createdAt: -1 });
+messageSchema.index({ organization: 1, conversation: 1, createdAt: -1 });
 // Unread counting: messages in a thread after the caller's lastReadAt, from
 // someone else. Covered by the index above; sender is added for the
 // "not my own messages" filter.
-messageSchema.index({ conversation: 1, sender: 1, createdAt: -1 });
+messageSchema.index({ organization: 1, conversation: 1, sender: 1, createdAt: -1 });
 
 messageSchema.virtual('isDeleted').get(function isDeleted() {
   return Boolean(this.deletedAt);

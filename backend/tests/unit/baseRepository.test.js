@@ -36,3 +36,47 @@ describe('BaseRepository.findByIdOrThrow', () => {
     expect(model.query.populate).toHaveBeenCalledWith('owner');
   });
 });
+
+describe('BaseRepository branches option', () => {
+  // Records `setOptions` on every query the repository builds.
+  function recordingModel() {
+    const calls = [];
+    const makeQuery = () => {
+      const q = {};
+      ['sort', 'skip', 'limit', 'lean', 'populate'].forEach((m) => { q[m] = jest.fn(() => q); });
+      q.setOptions = jest.fn((o) => { calls.push(o); return q; });
+      q.exec = jest.fn(async () => []);
+      q.then = (res) => Promise.resolve(0).then(res);
+      return q;
+    };
+    return {
+      calls,
+      modelName: 'Widget',
+      find: jest.fn(makeQuery),
+      findOne: jest.fn(makeQuery),
+      findById: jest.fn(makeQuery),
+      countDocuments: jest.fn(makeQuery),
+      aggregate: jest.fn(() => {
+        const a = { session: () => a, exec: async () => [], option: jest.fn((o) => { calls.push(o); return a; }) };
+        return a;
+      }),
+    };
+  }
+
+  it.each(['find', 'findOne', 'findById', 'paginate', 'count', 'aggregate'])('%s forwards branches', async (method) => {
+    const model = recordingModel();
+    const repo = new BaseRepository(model);
+    const args = { find: [{}], findOne: [{}], findById: ['1'], paginate: [{}, {}], count: [{}], aggregate: [[]] }[method];
+    const options = { branches: 'all' };
+    if (method === 'paginate') args.push({ ...options });
+    else args.push(options);
+    await repo[method](...args);
+    expect(model.calls).toContainEqual({ branches: 'all' });
+  });
+
+  it('does not call setOptions when branches is absent', async () => {
+    const model = recordingModel();
+    await new BaseRepository(model).find({});
+    expect(model.calls).toEqual([]);
+  });
+});

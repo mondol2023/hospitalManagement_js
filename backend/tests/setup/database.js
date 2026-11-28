@@ -10,6 +10,7 @@ const {
 // Requiring the models registers all sixteen with mongoose, so `ensureIndexes`
 // below covers the whole schema rather than whatever the test happened to touch.
 require('../../src/models');
+const { ensureDefaultTenant } = require('../helpers/tenant');
 
 // Booting mongod and building indexes costs more than the 5s default allows.
 jest.setTimeout(30_000);
@@ -59,6 +60,12 @@ beforeAll(async () => {
   // where the connection points is worth one argument.
   await connectDatabase(workerDatabaseUri());
   await ensureIndexes();
+});
+
+// `afterEach` clears the tenancy collections too, so the default tenant is rebuilt each time.
+beforeEach(async () => {
+  require('../../src/services/organizationStatus').clear();
+  await ensureDefaultTenant();
 });
 
 afterEach(async () => {

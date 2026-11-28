@@ -7,7 +7,10 @@
  * pointed at models registered under different names or never loaded at all.
  */
 
+const tenancy = require('./tenancy');
+
 module.exports = {
+  ...tenancy,
   Analytics: require('./Analytics'),
   Appointment: require('./Appointment'),
   Bed: require('./Bed'),

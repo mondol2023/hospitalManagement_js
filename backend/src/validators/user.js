@@ -1,7 +1,7 @@
 'use strict';
 
-const { z, idParam, listQuery, shortText, optionalText, boolish, nonEmptyPatch } = require('./common');
-const { ROLE_VALUES } = require('../utils/constants');
+const { z, idParam, listQuery, shortText, optionalText, boolish, nonEmptyPatch, objectId } = require('./common');
+const { TENANT_ADMIN_ASSIGNABLE_ROLES } = require('../utils/constants');
 const { PROFILE_BY_ROLE } = require('./profiles');
 const { email, phone, password } = require('./auth');
 
@@ -27,13 +27,13 @@ const bodyForRole = (role) =>
   z.object({ ...accountFields, role: z.literal(role), profile: PROFILE_BY_ROLE[role] });
 
 const create = {
-  body: z.discriminatedUnion('role', ROLE_VALUES.map(bodyForRole)),
+  body: z.discriminatedUnion('role', TENANT_ADMIN_ASSIGNABLE_ROLES.map(bodyForRole)),
 };
 
 const list = {
   query: listQuery({
     search: z.string().trim().max(120).optional(),
-    role: z.enum(ROLE_VALUES).optional(),
+    role: z.enum(TENANT_ADMIN_ASSIGNABLE_ROLES).optional(),
     isActive: boolish.optional(),
   }),
 };
@@ -67,7 +67,7 @@ const changeRole = {
   params: idParam(),
   body: z.discriminatedUnion(
     'role',
-    ROLE_VALUES.map((role) => z.object({ role: z.literal(role), profile: PROFILE_BY_ROLE[role] }))
+    TENANT_ADMIN_ASSIGNABLE_ROLES.map((role) => z.object({ role: z.literal(role), profile: PROFILE_BY_ROLE[role] }))
   ),
 };
 
@@ -76,4 +76,15 @@ const setActive = {
   body: z.object({ isActive: z.boolean() }),
 };
 
-module.exports = { create, list, byId, update, changeRole, setActive };
+/** Replaces the whole membership; the service enforces "at least one" for staff. */
+const setBranches = {
+  params: idParam(),
+  body: z.object({
+    branchIds: z
+      .array(objectId)
+      .max(50)
+      .refine((ids) => new Set(ids).size === ids.length, 'Duplicate branch ids'),
+  }),
+};
+
+module.exports = { setBranches, create, list, byId, update, changeRole, setActive };

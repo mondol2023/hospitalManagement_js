@@ -1,7 +1,7 @@
 'use strict';
 
 const { api, url, expectOk, expectError } = require('../helpers/api');
-const { createActor, createAdmittedPatient } = require('../helpers/factories');
+const { createActor, createAdmittedPatient, ensureDepartment } = require('../helpers/factories');
 const { Conversation, Patient, Notification } = require('../../src/models');
 const { ROLES, CONVERSATION_TYPE, NOTIFICATION_TYPE } = require('../../src/utils/constants');
 
@@ -148,6 +148,7 @@ describe('chat — the care-team channel', () => {
 
 describe('chat — the staff-only channel', () => {
   it('opens a thread between employees', async () => {
+    await ensureDepartment('ICU');
     const nurse = await createActor(ROLES.NURSE);
     const doctor = await createActor(ROLES.DOCTOR);
     const receptionist = await createActor(ROLES.RECEPTIONIST);

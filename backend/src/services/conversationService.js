@@ -9,6 +9,7 @@ const { ROLES, CONVERSATION_TYPE, SOCKET_EVENTS } = require('../utils/constants'
 const realtimeService = require('./realtimeService');
 const patientService = require('./patientService');
 const messageService = require('./messageService');
+const { resolveName } = require('./departmentRefs');
 
 /**
  * Who is in which thread. Three kinds exist: `care_team` (the only one a patient can
@@ -42,6 +43,7 @@ class ConversationService {
       populate: [
         { path: 'participants', select: 'name role profilePic' },
         { path: 'patient', select: 'medicalRecordNumber ward' },
+        { path: 'department', select: 'name' },
       ],
     });
   }
@@ -121,7 +123,7 @@ class ConversationService {
       {
         type: CONVERSATION_TYPE.STAFF_ONLY,
         title: title || 'Staff channel',
-        department,
+        department: await resolveName(department),
         participants,
         createdBy: userId,
       },

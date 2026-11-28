@@ -4,6 +4,7 @@ const { bedRepository, patientRepository } = require('../repositories');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
 const { withTransaction } = require('../utils/transaction');
+const context = require('../utils/context');
 const {
   BED_STATUS,
   CARE_LOG_TYPE,
@@ -14,6 +15,7 @@ const {
 const cacheService = require('./cacheService');
 const realtimeService = require('./realtimeService');
 const careLogService = require('./careLogService');
+const { resolveName, named } = require('./departmentRefs');
 const notificationService = require('./notificationService');
 
 const CACHE_PREFIX = 'beds';
@@ -37,13 +39,13 @@ class BedService {
     this.ns = cache.namespace(CACHE_PREFIX);
   }
 
-  list(query = {}) {
+  async list(query = {}) {
     const filter = { ...this.beds.searchFilter(query.search) };
-    if (query.ward) filter.ward = query.ward;
+    if (query.ward) filter.ward = await resolveName(query.ward);
     if (query.status) filter.status = query.status;
     if (query.type) filter.type = query.type;
     return this.beds.paginate(filter, query, {
-      populate: { path: 'patient', select: 'medicalRecordNumber user' },
+      populate: [{ path: 'patient', select: 'medicalRecordNumber user' }, named('ward')],
     });
   }
 
@@ -51,7 +53,7 @@ class BedService {
   available({ ward, type } = {}) {
     return this.cache.wrap(
       this.ns.key('available', { ward, type }),
-      () => this.beds.findAvailable({ ward, type }),
+      async () => this.beds.findAvailable({ ward: ward ? await resolveName(ward) : undefined, type }),
       30
     );
   }
@@ -67,7 +69,7 @@ class BedService {
 
   async getById(bedId) {
     const bed = await this.beds.findByIdOrThrow(bedId, 'Bed', {
-      populate: { path: 'patient', select: 'medicalRecordNumber user ward' },
+      populate: [{ path: 'patient', select: 'medicalRecordNumber user ward' }, named('ward')],
     });
     return bed;
   }
@@ -76,13 +78,14 @@ class BedService {
     try {
       const bed = await this.beds.create({
         bedNumber: payload.bedNumber,
-        ward: payload.ward,
+        ward: await resolveName(payload.ward),
         floor: payload.floor,
         type: payload.type,
         dailyRate: payload.dailyRate,
         notes: payload.notes,
       });
       await this.ns.invalidate();
+      await bed.populate(named('ward'));
       return bed.toJSON();
     } catch (error) {
       if (error.code === 11000) {
@@ -100,8 +103,9 @@ class BedService {
       if (patch[field] !== undefined) update[field] = patch[field];
     }
     if (!Object.keys(update).length) throw ApiError.badRequest('No updatable fields supplied');
+    if (update.ward !== undefined) update.ward = await resolveName(update.ward);
 
-    const bed = await this.beds.updateById(bedId, { $set: update });
+    const bed = await this.beds.updateById(bedId, { $set: update }, { populate: named('ward') });
     if (!bed) throw ApiError.notFound('Bed');
     await this.ns.invalidate();
     return bed;
@@ -148,8 +152,9 @@ class BedService {
           {
             $set: {
               bed: claimed._id,
-              ward: claimed.ward,
+              ward: claimed.ward && claimed.ward.name,
               isAdmitted: true,
+              admittedBranch: context.activeBranchId(),
               admittedAt: new Date(),
             },
             $unset: { dischargedAt: '' },
@@ -207,7 +212,7 @@ class BedService {
     const previousBedId = patient.bed;
     try {
       await this.patients.updateById(patientId, {
-        $set: { bed: target._id, ward: target.ward },
+        $set: { bed: target._id, ward: target.ward && target.ward.name },
       });
       await this.beds.release(previousBedId, patientId);
     } catch (error) {
@@ -288,7 +293,7 @@ class BedService {
             patientId: patient._id,
             type: CARE_LOG_TYPE.BED_ASSIGNMENT,
             bed: bed._id,
-            ward: bed.ward,
+            ward: bed.ward && bed.ward.name,
             notes,
           },
           actor,

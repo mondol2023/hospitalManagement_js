@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 const {
   NOTIFICATION_TYPE,
   NOTIFICATION_TYPE_VALUES,
@@ -51,12 +52,13 @@ const notificationSchema = new mongoose.Schema(
 );
 
 notificationSchema.plugin(toJSONPlugin);
+notificationSchema.plugin(tenantScoped, { scope: 'organization' });
 
 // --- Indexes ---------------------------------------------------------------
 // The inbox query: this user's notifications, newest first.
-notificationSchema.index({ recipient: 1, createdAt: -1 });
+notificationSchema.index({ organization: 1, recipient: 1, createdAt: -1 });
 // Unread badge count.
-notificationSchema.index({ recipient: 1, isRead: 1 });
+notificationSchema.index({ organization: 1, recipient: 1, isRead: 1 });
 // Background expiry, handled by MongoDB rather than a cron job.
 notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 

@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 const {
   EMERGENCY_STATUS,
   EMERGENCY_STATUS_VALUES,
@@ -51,11 +52,12 @@ const emergencySchema = new mongoose.Schema(
 );
 
 emergencySchema.plugin(toJSONPlugin);
+emergencySchema.plugin(tenantScoped, { scope: 'branch' });
 
 // --- Indexes ---------------------------------------------------------------
 // The active-alerts board: open/acknowledged, most severe and most recent first.
-emergencySchema.index({ status: 1, severity: 1, createdAt: -1 });
-emergencySchema.index({ createdAt: -1 });
+emergencySchema.index({ organization: 1, branch: 1, status: 1, severity: 1, createdAt: -1 });
+emergencySchema.index({ organization: 1, branch: 1, createdAt: -1 });
 
 /** Stamp the audit trail whenever status advances. */
 emergencySchema.pre('save', function stampTransition(next) {

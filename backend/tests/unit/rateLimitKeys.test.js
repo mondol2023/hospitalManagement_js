@@ -1,6 +1,6 @@
 'use strict';
 
-const { clientKey, refreshKey } = require('../../src/middleware/rateLimit');
+const { clientKey, refreshKey, authKey } = require('../../src/middleware/rateLimit');
 const { TokenService } = require('../../src/services/tokenService');
 const env = require('../../src/config/env');
 const { ROLES } = require('../../src/utils/constants');
@@ -47,5 +47,32 @@ describe('refreshKey', () => {
   it('falls back to IP when the body has no usable refresh token', () => {
     expect(refreshKey(req(), tokens)).toBe('ip:10.0.0.1');
     expect(refreshKey(req({ body: { refreshToken: 'junk' } }), tokens)).toBe('ip:10.0.0.1');
+  });
+});
+
+describe('authKey', () => {
+  const resolver = {
+    knownOrganizationCode: jest.fn(async ({ organizationCode, host }) => {
+      if (organizationCode) return organizationCode.toUpperCase() === 'LEBL' ? 'LEBL' : '';
+      return host === 'lebl.hms.test' ? 'lebl' : '';
+    }),
+  };
+  const body = (extra) => ({ email: ' A@B.co ', ...extra });
+
+  it('adds a known organisation code', async () => {
+    const key = await authKey(req({ body: body({ organizationCode: 'lebl' }) }), resolver);
+    expect(key).toBe('ip:10.0.0.1|em:a@b.co|org:LEBL');
+  });
+
+  it('ignores junk codes so they cannot mint buckets', async () => {
+    const a = await authKey(req({ body: body({ organizationCode: 'ZZZ1' }) }), resolver);
+    const b = await authKey(req({ body: body({ organizationCode: 'ZZZ2' }) }), resolver);
+    expect(a).toBe('ip:10.0.0.1|em:a@b.co');
+    expect(b).toBe(a);
+  });
+
+  it('uses the host subdomain', async () => {
+    const key = await authKey(req({ body: body(), hostname: 'lebl.hms.test' }), resolver);
+    expect(key).toBe('ip:10.0.0.1|em:a@b.co|org:lebl');
   });
 });

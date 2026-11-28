@@ -1,10 +1,10 @@
 'use strict';
 
-const { userRepository } = require('../repositories');
+const { userRepository, branchRepository } = require('../repositories');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
 const { withTransaction } = require('../utils/transaction');
-const { ROLES, ROLE_VALUES } = require('../utils/constants');
+const { ROLES, ROLE_VALUES, STAFF_ROLES, TENANT_ADMIN_ASSIGNABLE_ROLES } = require('../utils/constants');
 const profileService = require('./profileService');
 const cacheService = require('./cacheService');
 
@@ -61,7 +61,13 @@ async function assertAnotherAdminRemains(users, { session } = {}) {
 
 /** Administrative account management — the counterpart to `authService`. */
 class UserService {
-  constructor({ users = userRepository, profiles = profileService, cache = cacheService } = {}) {
+  constructor({
+    users = userRepository,
+    profiles = profileService,
+    cache = cacheService,
+    branches = branchRepository,
+  } = {}) {
+    this.branches = branches;
     this.users = users;
     this.profiles = profiles;
     this.cache = cache;
@@ -70,7 +76,7 @@ class UserService {
 
   /** Creates any account, including staff, together with its profile. */
   async createAccount({ name, email, password, role, phone, address, profile = {} }) {
-    if (!ROLE_VALUES.includes(role)) {
+    if (!TENANT_ADMIN_ASSIGNABLE_ROLES.includes(role)) {
       throw ApiError.badRequest(`Unknown role "${role}"`, { code: 'UNKNOWN_ROLE' });
     }
     if (await this.users.emailExists(email)) {
@@ -160,7 +166,7 @@ class UserService {
    * the old one in the same unit of work.
    */
   async changeRole(userId, nextRole, profile = {}, actor) {
-    if (!ROLE_VALUES.includes(nextRole)) {
+    if (!TENANT_ADMIN_ASSIGNABLE_ROLES.includes(nextRole)) {
       throw ApiError.badRequest(`Unknown role "${nextRole}"`, { code: 'UNKNOWN_ROLE' });
     }
 
@@ -216,6 +222,34 @@ class UserService {
     await this.ns.invalidate();
     logger.info('Role changed', { userId: String(userId), from: current.role, to: nextRole });
 
+    return updated;
+  }
+
+  /** Replaces a staff member's branch membership. */
+  async setBranches(userId, branchIds) {
+    const user = await this.users.findByIdOrThrow(userId, 'User');
+    if (!STAFF_ROLES.includes(user.role)) {
+      throw ApiError.badRequest('Only staff accounts have branch membership');
+    }
+    if (!branchIds.length) {
+      throw ApiError.badRequest('Staff need at least one branch', { code: 'BRANCH_REQUIRED' });
+    }
+    // Scoped count: ids from another organisation do not match.
+    if ((await this.branches.countByIds(branchIds)) !== branchIds.length) {
+      throw ApiError.notFound('Branch');
+    }
+
+    const members = branchIds.map(String);
+    const keep = (id) => (id && members.includes(String(id)) ? id : undefined);
+    const set = {
+      branches: branchIds,
+      defaultBranch: keep(user.defaultBranch) ?? branchIds[0],
+      lastActiveBranch: keep(user.lastActiveBranch) ?? null,
+    };
+    const updated = await this.users.updateById(userId, { $set: set });
+
+    await this.ns.invalidate();
+    logger.info('Branch membership changed', { userId: String(userId), count: branchIds.length });
     return updated;
   }
 

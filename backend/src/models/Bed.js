@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 const { BED_STATUS, BED_STATUS_VALUES } = require('../utils/constants');
 
 /**
@@ -15,7 +16,9 @@ const { BED_STATUS, BED_STATUS_VALUES } = require('../utils/constants');
 const bedSchema = new mongoose.Schema(
   {
     bedNumber: { type: String, required: true, trim: true, uppercase: true },
-    ward: { type: String, required: true, trim: true },
+    ward: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', required: true },
+    /** Pre-migration-002 text, kept for one release. */
+    legacyWard: { type: String, trim: true, select: false },
     floor: { type: Number, min: 0 },
     type: {
       type: String,
@@ -37,12 +40,13 @@ const bedSchema = new mongoose.Schema(
 );
 
 bedSchema.plugin(toJSONPlugin);
+bedSchema.plugin(tenantScoped, { scope: 'branch' });
 
 // --- Indexes ---------------------------------------------------------------
-bedSchema.index({ ward: 1, bedNumber: 1 }, { unique: true });
+bedSchema.index({ organization: 1, branch: 1, ward: 1, bedNumber: 1 }, { unique: true });
 // "How many free beds in the ICU?" — the hottest read on the ward dashboard.
-bedSchema.index({ status: 1, ward: 1 });
-bedSchema.index({ patient: 1 });
+bedSchema.index({ organization: 1, branch: 1, status: 1, ward: 1 });
+bedSchema.index({ organization: 1, branch: 1, patient: 1 });
 
 /**
  * Occupancy and patient assignment are two representations of one fact; keeping

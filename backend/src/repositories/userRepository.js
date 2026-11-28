@@ -2,6 +2,7 @@
 
 const BaseRepository = require('./BaseRepository');
 const { User } = require('../models');
+const { ROLES } = require('../utils/constants');
 
 class UserRepository extends BaseRepository {
   constructor() {
@@ -21,6 +22,14 @@ class UserRepository extends BaseRepository {
   findByEmailWithPassword(email) {
     return this.model
       .findOne({ email: String(email).toLowerCase().trim() })
+      .select('+password')
+      .exec();
+  }
+
+  /** Callers must run this unscoped (see organizationResolver). */
+  findPlatformAdminWithPassword(email) {
+    return this.model
+      .findOne({ email: String(email).toLowerCase().trim(), role: ROLES.PLATFORM_ADMIN })
       .select('+password')
       .exec();
   }
@@ -46,7 +55,7 @@ class UserRepository extends BaseRepository {
   findActiveById(id) {
     return this.model
       .findOne({ _id: id, isActive: true })
-      .select('name email role isActive tokensValidFrom')
+      .select('name email role isActive tokensValidFrom organization branches defaultBranch lastActiveBranch')
       .lean()
       .exec();
   }

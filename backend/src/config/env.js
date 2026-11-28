@@ -69,6 +69,7 @@ const envSchema = z
 
     // --- HTTP --------------------------------------------------------------
     CORS_ORIGINS: csv('http://localhost:3000'),
+    ROOT_DOMAIN: z.string().optional(),
     TRUST_PROXY: bool(false),
     BODY_LIMIT: z.string().default('1mb'),
     RATE_LIMIT_WINDOW_MS: int(15 * 60 * 1000, { min: 1000 }),

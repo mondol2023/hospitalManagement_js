@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 const { buildVitalsSchema, isCritical } = require('./schemas/vitals');
 const {
   CARE_LOG_TYPE,
@@ -151,25 +152,26 @@ const careLogSchema = new mongoose.Schema(
 );
 
 careLogSchema.plugin(toJSONPlugin);
+careLogSchema.plugin(tenantScoped, { scope: 'branch' });
 
 // --- Indexes ---------------------------------------------------------------
 // The patient timeline — by far the hottest read, so it leads.
-careLogSchema.index({ patient: 1, performedAt: -1 });
+careLogSchema.index({ organization: 1, branch: 1, patient: 1, performedAt: -1 });
 // The same timeline filtered to one kind, e.g. the medication chart alone.
-careLogSchema.index({ patient: 1, type: 1, performedAt: -1 });
+careLogSchema.index({ organization: 1, branch: 1, patient: 1, type: 1, performedAt: -1 });
 // The ward feed the nurses' station leaves open all shift.
-careLogSchema.index({ ward: 1, performedAt: -1 });
+careLogSchema.index({ organization: 1, branch: 1, ward: 1, performedAt: -1 });
 // A nurse's own shift log ("what have I recorded today?").
-careLogSchema.index({ recordedBy: 1, performedAt: -1 });
+careLogSchema.index({ organization: 1, branch: 1, recordedBy: 1, performedAt: -1 });
 // The doctor's review queue. Partial, because the overwhelming majority of logs
 // are never flagged — this index stays small even as the collection grows.
 careLogSchema.index(
-  { acknowledgedAt: 1, performedAt: -1 },
+  { organization: 1, branch: 1, acknowledgedAt: 1, performedAt: -1 },
   { name: 'attention_queue', partialFilterExpression: { requiresAttention: true } }
 );
 // Due/overdue medication round.
 careLogSchema.index(
-  { 'medication.scheduledFor': 1 },
+  { organization: 1, branch: 1, 'medication.scheduledFor': 1 },
   {
     name: 'medication_due',
     partialFilterExpression: { 'medication.status': MEDICATION_STATUS.SCHEDULED },
@@ -177,7 +179,7 @@ careLogSchema.index(
 );
 // Unbilled chargeable services, for the nightly billing sweep.
 careLogSchema.index(
-  { patient: 1, performedAt: 1 },
+  { organization: 1, branch: 1, patient: 1, performedAt: 1 },
   { name: 'unbilled_services', partialFilterExpression: { bill: null } }
 );
 

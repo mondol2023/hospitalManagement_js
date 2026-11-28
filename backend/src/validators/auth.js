@@ -1,6 +1,6 @@
 'use strict';
 
-const { z, shortText, optionalText, dateValue } = require('./common');
+const { z, shortText, optionalText, dateValue, objectId } = require('./common');
 const { BLOOD_GROUPS, GENDERS } = require('../utils/constants');
 
 /**
@@ -37,11 +37,14 @@ const patientProfile = z.object({
   emergencyContact,
 });
 
+const organizationCode = z.string().trim().toUpperCase().min(2).max(8).optional();
+
 const register = {
   body: z.object({
     name: shortText(120),
     email,
     password,
+    organizationCode,
     phone: phone.optional(),
     address: optionalText(500),
     profile: patientProfile,
@@ -49,7 +52,7 @@ const register = {
 };
 
 const login = {
-  body: z.object({ email, password: z.string().min(1).max(128) }),
+  body: z.object({ email, password: z.string().min(1).max(128), organizationCode }),
 };
 
 const refresh = {
@@ -60,6 +63,10 @@ const logout = {
   body: z.object({ refreshToken: z.string().min(1).max(4096).optional() }),
 };
 
+const switchBranch = {
+  body: z.object({ branchId: objectId, refreshToken: z.string().min(1).max(4096) }),
+};
+
 const changePassword = {
   body: z.object({
     currentPassword: z.string().min(1).max(128),
@@ -67,4 +74,4 @@ const changePassword = {
   }),
 };
 
-module.exports = { register, login, refresh, logout, changePassword, email, phone, password };
+module.exports = { register, login, refresh, logout, switchBranch, changePassword, email, phone, password };

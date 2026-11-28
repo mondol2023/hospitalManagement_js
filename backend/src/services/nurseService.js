@@ -4,6 +4,7 @@ const { nurseRepository, patientRepository } = require('../repositories');
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
 const rosterScope = require('../utils/rosterScope');
+const { resolveName, named } = require('./departmentRefs');
 
 /**
  * Nursing roster: who works which ward, who is on the floor right now.
@@ -30,13 +31,13 @@ class NurseService {
       filter.isOnDuty = query.onDuty === 'true' || query.onDuty === true;
     }
     return this.nurses.paginate(filter, query, {
-      populate: { path: 'user', select: 'name email phone' },
+      populate: [{ path: 'user', select: 'name email phone' }, named('department')],
     });
   }
 
   async getByUser(userId) {
     const nurse = await this.nurses.findByUser(userId, {
-      populate: { path: 'user', select: 'name email phone profilePic' },
+      populate: [{ path: 'user', select: 'name email phone profilePic' }, named('department')],
     });
     if (!nurse) throw ApiError.notFound('Nurse profile');
     return nurse;
@@ -79,7 +80,9 @@ class NurseService {
     }
     if (!Object.keys(update).length) throw ApiError.badRequest('No updatable fields supplied');
 
-    const nurse = await this.nurses.updateOne({ user: userId }, { $set: update });
+    if (update.department !== undefined) update.department = await resolveName(update.department);
+
+    const nurse = await this.nurses.updateOne({ user: userId }, { $set: update }, { populate: named('department') });
     if (!nurse) throw ApiError.notFound('Nurse profile');
     return nurse;
   }

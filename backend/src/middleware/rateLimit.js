@@ -8,6 +8,7 @@ const logger = require('../config/logger');
 const { redisClient, isRedisHealthy } = require('../config/redis');
 const ApiError = require('../utils/ApiError');
 const tokenService = require('../services/tokenService');
+const organizationResolver = require('../services/organizationResolver');
 
 // Redis-backed when available (shared across workers), memory otherwise.
 // Keyed by verified user where possible so a hospital NAT isn't one bucket.
@@ -122,15 +123,32 @@ function createLimiter({
 
 const globalLimiter = createLimiter({ name: 'global', max: env.RATE_LIMIT_MAX });
 
-// Credential endpoints: IP + email, failures only, so shift-change logins are free.
+// IP + email, plus the organisation only when it exists (junk codes must not mint buckets).
+async function authKey(req, resolver = organizationResolver) {
+  const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : '';
+  const base = `ip:${normaliseIp(req.ip)}|em:${email.slice(0, 120)}`;
+  try {
+    const org = await resolver.knownOrganizationCode({
+      organizationCode: req.body?.organizationCode,
+      host: req.hostname,
+    });
+    return org ? `${base}|org:${org}` : base;
+  } catch (error) {
+    logger.warn('Auth throttle org lookup failed', { error: error.message });
+    return base;
+  }
+}
+
+// express-rate-limit calls keyGenerator(req, res); wrap so the 2nd arg never hits our seams.
+const authKeyGenerator = (req) => authKey(req);
+const refreshKeyGenerator = (req) => refreshKey(req);
+
+// Credential endpoints: failures only, so shift-change logins are free.
 const authLimiter = createLimiter({
   name: 'auth',
   max: env.AUTH_RATE_LIMIT_MAX,
   skipSuccessfulRequests: true,
-  keyGenerator: (req) => {
-    const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : '';
-    return `ip:${normaliseIp(req.ip)}|em:${email.slice(0, 120)}`;
-  },
+  keyGenerator: authKeyGenerator,
 });
 
 // Refresh failures only, keyed per token owner (see refreshKey).
@@ -138,7 +156,7 @@ const refreshLimiter = createLimiter({
   name: 'refresh',
   max: env.AUTH_RATE_LIMIT_MAX,
   skipSuccessfulRequests: true,
-  keyGenerator: refreshKey,
+  keyGenerator: refreshKeyGenerator,
 });
 
 // Heavy reads: short window to smooth bursts.
@@ -154,6 +172,9 @@ module.exports = {
   reportLimiter,
   uploadLimiter,
   clientKey,
+  authKey,
+  authKeyGenerator,
+  refreshKeyGenerator,
   refreshKey,
   normaliseIp,
   isRedisHealthy,

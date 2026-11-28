@@ -37,15 +37,17 @@ class BaseRepository {
   }
 
   /** Updates by id and returns the updated document. */
-  updateById(id, update, { session, lean = true, projection } = {}) {
+  updateById(id, update, { session, lean = true, projection, populate } = {}) {
     const query = this.model
       .findByIdAndUpdate(id, update, { new: true, runValidators: true, context: 'query', session, projection });
+    if (populate) query.populate(populate);
     return lean ? query.lean().exec() : query.exec();
   }
 
-  updateOne(filter, update, { session, lean = true } = {}) {
+  updateOne(filter, update, { session, lean = true, populate } = {}) {
     const query = this.model
       .findOneAndUpdate(filter, update, { new: true, runValidators: true, context: 'query', session });
+    if (populate) query.populate(populate);
     return lean ? query.lean().exec() : query.exec();
   }
 
@@ -69,8 +71,8 @@ class BaseRepository {
    * @param {boolean} [options.lean=true] set false when the caller needs schema
    *   methods or intends to `save()` the result
    */
-  findById(id, { projection, populate, lean = true, session } = {}) {
-    return this._prepare(this.model.findById(id, projection, { session }), { populate, lean });
+  findById(id, { projection, populate, lean = true, session, branches } = {}) {
+    return this._prepare(this.model.findById(id, projection, { session }), { populate, lean, branches });
   }
 
   async findByIdOrThrow(id, label = this.name, options) {
@@ -79,29 +81,33 @@ class BaseRepository {
     return doc;
   }
 
-  findOne(filter = {}, { projection, populate, lean = true, sort, session } = {}) {
+  findOne(filter = {}, { projection, populate, lean = true, sort, session, branches } = {}) {
     const query = this.model.findOne(filter, projection, { session });
     if (sort) query.sort(sort);
-    return this._prepare(query, { populate, lean });
+    return this._prepare(query, { populate, lean, branches });
   }
 
   /**
    * Unbounded only in the sense that the caller supplies the limit — there is
    * deliberately no way to ask for "everything".
    */
-  find(filter = {}, { projection, populate, sort, limit = 100, skip = 0, lean = true } = {}) {
+  find(filter = {}, { projection, populate, sort, limit = 100, skip = 0, lean = true, branches } = {}) {
     const query = this.model.find(filter, projection).sort(sort || this.defaultSort).skip(skip).limit(limit);
-    return this._prepare(query, { populate, lean });
+    return this._prepare(query, { populate, lean, branches });
   }
 
   /** The standard list endpoint: a bounded page plus its total. */
-  async paginate(filter = {}, query = {}, { projection, populate, lean = true } = {}) {
+  async paginate(filter = {}, query = {}, { projection, populate, lean = true, branches } = {}) {
     const { page, limit, skip } = parsePagination(query);
     const sort = parseSort(query.sort, this.sortableFields, this.defaultSort);
 
     const [items, total] = await Promise.all([
-      this._prepare(this.model.find(filter, projection).sort(sort).skip(skip).limit(limit), { populate, lean }),
-      this.model.countDocuments(filter),
+      this._prepare(this.model.find(filter, projection).sort(sort).skip(skip).limit(limit), {
+        populate,
+        lean,
+        branches,
+      }),
+      this.count(filter, { branches }),
     ]);
 
     return buildPage({ items, total, page, limit });
@@ -115,8 +121,10 @@ class BaseRepository {
     return { $or: this.searchableFields.map((field) => ({ [field]: pattern })) };
   }
 
-  count(filter = {}) {
-    return this.model.countDocuments(filter);
+  count(filter = {}, { branches } = {}) {
+    const query = this.model.countDocuments(filter);
+    if (branches) query.setOptions({ branches });
+    return query;
   }
 
   /** Cheaper than `count(...) > 0`: stops at the first match. */
@@ -124,8 +132,10 @@ class BaseRepository {
     return Boolean(await this.model.exists(filter));
   }
 
-  aggregate(pipeline, { session } = {}) {
-    return this.model.aggregate(pipeline).session(session || null).exec();
+  aggregate(pipeline, { session, branches } = {}) {
+    const aggregation = this.model.aggregate(pipeline).session(session || null);
+    if (branches) aggregation.option({ branches });
+    return aggregation.exec();
   }
 
   /**
@@ -143,7 +153,8 @@ class BaseRepository {
   // --- Internals -----------------------------------------------------------
 
   /** @private applies populate/lean uniformly and executes. */
-  _prepare(query, { populate, lean }) {
+  _prepare(query, { populate, lean, branches }) {
+    if (branches) query.setOptions({ branches });
     if (populate) query.populate(populate);
     if (lean) query.lean();
     return query.exec();

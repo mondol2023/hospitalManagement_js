@@ -78,4 +78,39 @@ describe('watchSession', () => {
 
     expect(resolve).not.toHaveBeenCalled();
   });
+
+  it('disconnects when branch membership was revoked', async () => {
+    const socket = fakeSocket();
+    const resolve = jest
+      .fn()
+      .mockRejectedValue(ApiError.forbidden('revoked', { code: 'BRANCH_ACCESS_REVOKED' }));
+    watchSession(socket, { resolve, intervalMs: INTERVAL });
+
+    await tick();
+
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('disconnects when the organisation is suspended', async () => {
+    const socket = fakeSocket();
+    const resolve = jest
+      .fn()
+      .mockRejectedValue(ApiError.forbidden('suspended', { code: 'ORGANIZATION_SUSPENDED' }));
+    watchSession(socket, { resolve, intervalMs: INTERVAL });
+
+    await tick();
+
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('disconnects when the organisation changed', async () => {
+    const socket = fakeSocket();
+    socket.data.user.organizationId = 'orgA';
+    const resolve = jest.fn().mockResolvedValue({ id: 'u1', role: ROLES.DOCTOR, organizationId: 'orgB' });
+    watchSession(socket, { resolve, intervalMs: INTERVAL });
+
+    await tick();
+
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
 });

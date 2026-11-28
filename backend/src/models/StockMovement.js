@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 const { STOCK_MOVEMENT_VALUES } = require('../utils/constants');
 
 // Append-only: one row per change to a medicine's count, so "who added how much" survives the log rotation.
@@ -18,9 +19,10 @@ const stockMovementSchema = new mongoose.Schema(
 );
 
 stockMovementSchema.plugin(toJSONPlugin);
+stockMovementSchema.plugin(tenantScoped, { scope: 'branch' });
 
-stockMovementSchema.index({ medicine: 1, createdAt: -1 });
-stockMovementSchema.index({ kind: 1, createdAt: -1 });
-stockMovementSchema.index({ actor: 1, createdAt: -1 });
+stockMovementSchema.index({ organization: 1, branch: 1, medicine: 1, createdAt: -1 });
+stockMovementSchema.index({ organization: 1, branch: 1, kind: 1, createdAt: -1 });
+stockMovementSchema.index({ organization: 1, branch: 1, actor: 1, createdAt: -1 });
 
 module.exports = mongoose.model('StockMovement', stockMovementSchema);

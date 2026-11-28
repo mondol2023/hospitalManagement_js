@@ -54,8 +54,8 @@ const doctorSchema = new mongoose.Schema(
 doctorSchema.plugin(staffProfilePlugin);
 doctorSchema.plugin(toJSONPlugin);
 
-doctorSchema.index({ specialization: 1, isAcceptingPatients: 1 });
-doctorSchema.index({ department: 1, isAcceptingPatients: 1 });
+doctorSchema.index({ organization: 1, specialization: 1, isAcceptingPatients: 1 });
+doctorSchema.index({ organization: 1, department: 1, isAcceptingPatients: 1 });
 
 /** True when the doctor works on the weekday of `date`. */
 doctorSchema.methods.worksOn = function worksOn(date) {

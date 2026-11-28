@@ -4,6 +4,10 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const userRepository = require('../repositories/userRepository');
 const tokenService = require('../services/tokenService');
+const organizationStatus = require('../services/organizationStatus');
+const context = require('../utils/context');
+const { ContextMissingError } = require('../utils/tenantErrors');
+const { ROLES } = require('../utils/constants');
 
 const { TokenService } = tokenService;
 
@@ -55,10 +59,20 @@ function extractToken(req) {
  * @returns {Promise<object>} actor: `{ id, _id, name, email, role, tokenId }`
  * @throws {ApiError} 401 for every rejection reason, with a distinct `code`
  */
-async function resolveActor(token, { tokens = tokenService, users = userRepository } = {}) {
+async function resolveActor(
+  token,
+  { tokens = tokenService, users = userRepository, orgs = organizationStatus, allowPlatform = true } = {}
+) {
   const payload = tokens.verifyAccessToken(token);
 
-  const user = await users.findActiveById(payload.sub);
+  // The one unscoped read on the request path: the token names the user by
+  // globally unique id, and the org claim below binds it to a tenant.
+  const { user, org } = await context.withoutTenant('auth:resolve-actor', async () => {
+    const found = await users.findActiveById(payload.sub);
+    if (!found) return {};
+    return { user: found, org: found.organization ? await orgs.getInfo(found.organization) : null };
+  });
+
   if (!user) {
     // Deleted or deactivated. Deliberately not distinguished from "bad token":
     // the difference is only useful to someone probing for valid accounts.
@@ -71,13 +85,72 @@ async function resolveActor(token, { tokens = tokenService, users = userReposito
     });
   }
 
-  return {
+  const userOrg = user.organization ? String(user.organization) : null;
+  if ((payload.org ? String(payload.org) : null) !== userOrg) {
+    throw ApiError.unauthorized('Invalid token', { code: 'TOKEN_INVALID' });
+  }
+
+  const isPlatform = user.role === ROLES.PLATFORM_ADMIN;
+  // Runs with the tenant filter off, so only /platform/* may accept this actor.
+  if (isPlatform && !allowPlatform) {
+    throw ApiError.forbidden('Platform administrators can only use /platform routes');
+  }
+  if (!isPlatform && (!org || org.status === 'suspended')) {
+    throw ApiError.forbidden('This organization is suspended', { code: 'ORGANIZATION_SUSPENDED' });
+  }
+
+  const branchIds = (user.branches || []).map(String);
+  const isPatient = user.role === ROLES.PATIENT;
+  const pick = (...ids) => ids.find(Boolean);
+  let branchId = null;
+  if (isPatient) {
+    branchId = pick(payload.br, org?.defaultRegistrationBranch, user.defaultBranch);
+  } else if (!isPlatform) {
+    branchId = pick(payload.br, user.lastActiveBranch, user.defaultBranch);
+    if (!branchId || !branchIds.includes(String(branchId))) {
+      throw ApiError.forbidden('Access to this branch has been revoked', {
+        code: 'BRANCH_ACCESS_REVOKED',
+      });
+    }
+  }
+  branchId = branchId ? String(branchId) : null;
+
+  const actor = {
     id: String(user._id),
     _id: user._id,
     name: user.name,
     email: user.email,
     role: user.role,
     tokenId: payload.jti,
+    organizationId: userOrg,
+    branchId,
+    branchIds,
+  };
+
+  try {
+    context.set(tenantStoreFor(actor));
+  } catch (error) {
+    // Socket handshakes have no store; their handlers bind one per event.
+    if (!(error instanceof ContextMissingError)) throw error;
+  }
+
+  return actor;
+}
+
+/** Tenant fields of the context store for an authenticated actor (HTTP and sockets). */
+function tenantStoreFor(actor) {
+  if (actor.role === ROLES.PLATFORM_ADMIN) {
+    return { userId: actor.id, roles: [actor.role], bypassTenant: true, bypassReason: 'platform_admin' };
+  }
+  const isPatient = actor.role === ROLES.PATIENT;
+  return {
+    userId: actor.id,
+    roles: [actor.role],
+    organizationId: actor.organizationId,
+    branchId: actor.branchId,
+    branchIds: actor.branchIds,
+    canReadAllBranches: [ROLES.ADMIN, ROLES.MANAGER, ROLES.PATIENT].includes(actor.role),
+    defaultBranchRead: isPatient ? 'all' : 'active',
   };
 }
 
@@ -87,7 +160,7 @@ async function resolveActor(token, { tokens = tokenService, users = userReposito
  *   them through with no `req.user` (`false`)
  * @param {object} [options.deps] injection seam for tests
  */
-function createAuthenticator({ required = true, deps = {} } = {}) {
+function createAuthenticator({ required = true, allowPlatform = false, deps = {} } = {}) {
   return asyncHandler(async (req, res, next) => {
     const token = extractToken(req);
 
@@ -98,15 +171,16 @@ function createAuthenticator({ required = true, deps = {} } = {}) {
       return next();
     }
 
+    const options = { ...deps, allowPlatform };
     if (required) {
-      req.user = await resolveActor(token, deps);
+      req.user = await resolveActor(token, options);
       return next();
     }
 
     // Optional mode treats a bad token as no token. It must never 401, because
     // the whole point is that the endpoint also serves anonymous callers.
     try {
-      req.user = await resolveActor(token, deps);
+      req.user = await resolveActor(token, options);
     } catch {
       req.user = undefined;
     }
@@ -122,3 +196,5 @@ module.exports.authenticate = authenticate;
 module.exports.optionalAuthenticate = optionalAuthenticate;
 module.exports.createAuthenticator = createAuthenticator;
 module.exports.resolveActor = resolveActor;
+module.exports.authenticatePlatform = createAuthenticator({ required: true, allowPlatform: true });
+module.exports.tenantStoreFor = tenantStoreFor;

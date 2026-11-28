@@ -1,7 +1,7 @@
 'use strict';
 
 const { api, url, expectOk, expectError } = require('../helpers/api');
-const { createActor, createAdmittedPatient, createBed } = require('../helpers/factories');
+const { createActor, createAdmittedPatient, createBed, ensureDepartment } = require('../helpers/factories');
 const bedService = require('../../src/services/bedService');
 const { Bed, Patient, CareLog, Notification } = require('../../src/models');
 const { ROLES, BED_STATUS, CARE_LOG_TYPE } = require('../../src/utils/constants');
@@ -59,6 +59,7 @@ const assign = (bed, patient, actor) =>
 
 describe('beds — inventory is admin-only', () => {
   it('lets an administrator register a bed, normalising the number', async () => {
+    await ensureDepartment('ICU');
     const admin = await createActor(ROLES.ADMIN);
 
     const res = await api()
@@ -75,6 +76,7 @@ describe('beds — inventory is admin-only', () => {
   });
 
   it('refuses a second bed with the same number in the same ward', async () => {
+    await ensureDepartment('ICU');
     const admin = await createActor(ROLES.ADMIN);
     const body = { bedNumber: 'B-1', ward: 'ICU' };
 
@@ -82,10 +84,12 @@ describe('beds — inventory is admin-only', () => {
     const res = await api().post(url('/beds')).set(admin.headers).send(body);
 
     expectError(res, 409);
-    expect(await Bed.countDocuments({ ward: 'ICU' })).toBe(1);
+    expect(await Bed.countDocuments({ ward: (await ensureDepartment('ICU'))._id })).toBe(1);
   });
 
   it('allows the same bed number in a different ward', async () => {
+    await ensureDepartment('ICU');
+    await ensureDepartment('Maternity');
     const admin = await createActor(ROLES.ADMIN);
 
     expectOk(

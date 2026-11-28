@@ -37,7 +37,7 @@ class CareLogRepository extends BaseRepository {
     return this.paginate(filter, query, {
       populate: [
         { path: 'recordedBy', select: 'name role' },
-        { path: 'bed', select: 'bedNumber ward' },
+        { path: 'bed', select: 'bedNumber ward', populate: { path: 'ward', select: 'name' } },
       ],
     });
   }

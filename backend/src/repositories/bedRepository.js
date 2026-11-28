@@ -1,15 +1,23 @@
 'use strict';
 
 const BaseRepository = require('./BaseRepository');
-const { Bed } = require('../models');
+const { Bed, Department } = require('../models');
 const { BED_STATUS } = require('../utils/constants');
+
+const WARD = { path: 'ward', select: 'name' };
+
+/** `{ id -> name }` for the given ward ids. */
+async function wardNames(ids) {
+  const rows = await Department.find({ _id: { $in: ids } }).select('name').lean();
+  return new Map(rows.map((r) => [String(r._id), r.name]));
+}
 
 class BedRepository extends BaseRepository {
   constructor() {
     super(Bed, {
       sortableFields: ['bedNumber', 'ward', 'status', 'dailyRate'],
       defaultSort: { ward: 1, bedNumber: 1 },
-      searchableFields: ['bedNumber', 'ward'],
+      searchableFields: ['bedNumber'],
     });
   }
 
@@ -29,6 +37,7 @@ class BedRepository extends BaseRepository {
         { $set: { status: BED_STATUS.OCCUPIED, patient: patientId, occupiedAt: new Date() } },
         { new: true, session }
       )
+      .populate(WARD)
       .lean()
       .exec();
   }
@@ -43,6 +52,7 @@ class BedRepository extends BaseRepository {
         { $set: { status: BED_STATUS.CLEANING, patient: null, occupiedAt: null } },
         { new: true, session }
       )
+      .populate(WARD)
       .lean()
       .exec();
   }
@@ -51,7 +61,7 @@ class BedRepository extends BaseRepository {
     const filter = { status: BED_STATUS.AVAILABLE };
     if (ward) filter.ward = ward;
     if (type) filter.type = type;
-    return this.model.find(filter).select('bedNumber ward type dailyRate floor').lean().exec();
+    return this.model.find(filter).select('bedNumber ward type dailyRate floor').populate(WARD).lean().exec();
   }
 
   findByPatient(patientId) {
@@ -66,8 +76,8 @@ class BedRepository extends BaseRepository {
    * and the response serialiser, which turns `_id` into `id`, would make it look
    * even more like one.
    */
-  occupancyByWard() {
-    return this.aggregate([
+  async occupancyByWard() {
+    const rows = await this.aggregate([
       { $group: { _id: { ward: '$ward', status: '$status' }, count: { $sum: 1 } } },
       {
         $group: {
@@ -76,13 +86,18 @@ class BedRepository extends BaseRepository {
           byStatus: { $push: { status: '$_id.status', count: '$count' } },
         },
       },
-      { $sort: { _id: 1 } },
       { $project: { _id: 0, ward: '$_id', total: 1, byStatus: 1 } },
     ]);
+    // `ward` is a Department id; the board shows the name and keeps the id alongside.
+    const names = await wardNames(rows.map((r) => r.ward));
+    return rows
+      .map((r) => ({ ...r, wardId: r.ward, ward: names.get(String(r.ward)) || String(r.ward) }))
+      .sort((a, b) => a.ward.localeCompare(b.ward));
   }
 
-  wards() {
-    return this.model.distinct('ward').exec();
+  async wards() {
+    const ids = await this.model.distinct('ward').exec();
+    return [...(await wardNames(ids)).values()].sort();
   }
 }
 

@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 const { BLOOD_GROUPS, GENDERS } = require('../utils/constants');
 
 /**
@@ -17,11 +18,9 @@ const patientSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      unique: true,
     },
     medicalRecordNumber: {
       type: String,
-      unique: true,
       // Generated in a pre-validate hook; not supplied by clients.
       required: false,
       trim: true,
@@ -65,20 +64,31 @@ const patientSchema = new mongoose.Schema(
     dischargedAt: { type: Date },
     medicalHistory: { type: String, maxlength: 5000 },
     isAdmitted: { type: Boolean, default: false },
+    /** Branch where the patient registered; the patient itself belongs to the organisation. */
+    registeredAtBranch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
+    /** Branch of the current admission; set on admit, cleared on discharge. */
+    admittedBranch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
   },
   { timestamps: true }
 );
 
 patientSchema.plugin(toJSONPlugin);
+patientSchema.plugin(tenantScoped, { scope: 'organization' });
 
 // --- Indexes ---------------------------------------------------------------
-patientSchema.index({ primaryDoctor: 1, createdAt: -1 });
-patientSchema.index({ isAdmitted: 1, admittedAt: -1 });
-patientSchema.index({ bloodGroup: 1 });
+patientSchema.index({ organization: 1, user: 1 }, { unique: true });
+patientSchema.index(
+  { organization: 1, medicalRecordNumber: 1 },
+  { unique: true, partialFilterExpression: { medicalRecordNumber: { $type: 'string' } } }
+);
+patientSchema.index({ organization: 1, primaryDoctor: 1, createdAt: -1 });
+patientSchema.index({ organization: 1, isAdmitted: 1, admittedAt: -1 });
+patientSchema.index({ organization: 1, admittedBranch: 1, isAdmitted: 1 });
+patientSchema.index({ organization: 1, bloodGroup: 1 });
 // A nurse's own patient list — multikey, and the first query of every shift.
-patientSchema.index({ assignedNurses: 1, isAdmitted: 1 });
+patientSchema.index({ organization: 1, assignedNurses: 1, isAdmitted: 1 });
 // The ward census board.
-patientSchema.index({ ward: 1, isAdmitted: 1 });
+patientSchema.index({ organization: 1, ward: 1, isAdmitted: 1 });
 
 /**
  * Human-facing record number. Uses a timestamp + random suffix rather than a

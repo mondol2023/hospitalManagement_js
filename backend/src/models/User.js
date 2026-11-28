@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const env = require('../config/env');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 const { ROLE_VALUES, ROLES, AUTH_PROVIDERS } = require('../utils/constants');
 
 /**
@@ -27,7 +28,6 @@ const userSchema = new mongoose.Schema(
     email: {
       type: String,
       required: [true, 'Email is required'],
-      unique: true,
       lowercase: true,
       trim: true,
       match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Invalid email address'],
@@ -60,6 +60,10 @@ const userSchema = new mongoose.Schema(
       default: 'local',
     },
     lastLoginAt: { type: Date },
+    /** Branches the user may work at; staff tokens carry one of them as `br`. */
+    branches: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Branch' }],
+    defaultBranch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
+    lastActiveBranch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
     /**
      * Any token issued before this instant is rejected. Bumping it is how
      * "log out everywhere" and forced re-auth after a password change work
@@ -71,12 +75,14 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.plugin(toJSONPlugin);
+userSchema.plugin(tenantScoped, { scope: 'organization', optionalWhen: (doc) => doc.role === 'platform_admin' });
 
 // --- Indexes ---------------------------------------------------------------
-// `email` already has a unique index from the field definition.
+// Email is unique per organisation, not globally.
+userSchema.index({ organization: 1, email: 1 }, { unique: true });
 // Analytics counts users by role; the routes list users filtered by role.
-userSchema.index({ role: 1, isActive: 1 });
-userSchema.index({ createdAt: -1 });
+userSchema.index({ organization: 1, role: 1, isActive: 1 });
+userSchema.index({ organization: 1, createdAt: -1 });
 // Supports name/email search without a collection scan.
 userSchema.index({ name: 'text', email: 'text' });
 

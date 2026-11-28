@@ -17,6 +17,7 @@ const careAccess = require('./careAccess');
 const errorHandler = require('./errorHandler');
 const rateLimit = require('./rateLimit');
 const requestContext = require('./requestContext');
+const tenantContext = require('./tenantContext');
 const security = require('./security');
 const upload = require('./upload');
 const validate = require('./validate');
@@ -25,8 +26,10 @@ module.exports = {
   // auth
   authenticate: authenticate.authenticate,
   optionalAuthenticate: authenticate.optionalAuthenticate,
+  authenticatePlatform: authenticate.authenticatePlatform,
   createAuthenticator: authenticate.createAuthenticator,
   resolveActor: authenticate.resolveActor,
+  tenantContext: tenantContext.tenantContext,
 
   // rbac
   authorize: authorize.authorize,

@@ -18,6 +18,7 @@ const {
 const {
   ROLES,
   ROLE_VALUES,
+  STAFF_ROLES,
   CONVERSATION_TYPE,
 } = require('../../src/utils/constants');
 
@@ -66,7 +67,7 @@ describe('accessPolicy — identity coercion', () => {
 describe('accessPolicy — role tiers', () => {
   it('counts every employee as staff and the patient as not', () => {
     for (const role of ROLE_VALUES) {
-      expect(isStaff(role)).toBe(role !== ROLES.PATIENT);
+      expect(isStaff(role)).toBe(role !== ROLES.PATIENT && role !== ROLES.PLATFORM_ADMIN);
     }
   });
 
@@ -132,7 +133,7 @@ describe('accessPolicy — the care team', () => {
 
 describe('accessPolicy — demographics', () => {
   it('is open to every employee, assigned or not', () => {
-    for (const role of ROLE_VALUES.filter((r) => r !== ROLES.PATIENT)) {
+    for (const role of STAFF_ROLES) {
       // A receptionist cannot book for someone they may not look up.
       expect(canViewPatient(actor(role, 'stranger'), patientDoc())).toBe(true);
     }
@@ -251,7 +252,7 @@ describe('accessPolicy — which conversations a role may join', () => {
   });
 
   it('lets every employee into every channel kind', () => {
-    for (const role of ROLE_VALUES.filter((r) => r !== ROLES.PATIENT)) {
+    for (const role of STAFF_ROLES) {
       for (const type of types) {
         expect(canJoinConversation(role, type)).toBe(true);
       }

@@ -33,6 +33,7 @@ delete process.env.REDIS_URL;
 
 // Distinct, deterministic, and long enough for the schema's 32-char minimum.
 // Fixed rather than random so a failing token test can be reproduced by hand.
+process.env.ROOT_DOMAIN = 'hms.test';
 process.env.JWT_ACCESS_SECRET = 'test-access-secret-0123456789abcdefghijklmno';
 process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-0123456789abcdefghijklmno';
 process.env.JWT_ACCESS_TTL = '15m';

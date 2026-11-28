@@ -7,7 +7,7 @@ class NurseRepository extends BaseRepository {
   constructor() {
     super(Nurse, {
       sortableFields: ['grade', 'experienceInYears', 'department'],
-      searchableFields: ['department', 'qualifications', 'employeeId'],
+      searchableFields: ['qualifications', 'employeeId'],
     });
   }
 

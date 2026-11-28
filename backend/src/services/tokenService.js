@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const env = require('../config/env');
 const ApiError = require('../utils/ApiError');
 const cacheService = require('./cacheService');
+const { buildPlatformKey } = cacheService;
 
 /**
  * Access/refresh token issuing, verification and revocation.
@@ -24,10 +25,19 @@ const cacheService = require('./cacheService');
  */
 
 const TOKEN_TYPE = Object.freeze({ ACCESS: 'access', REFRESH: 'refresh' });
-const DENYLIST_PREFIX = 'hms:v1:jti:revoked';
+const DENYLIST_PREFIX = 'jti:revoked';
 
 function denylistKey(jti) {
-  return `${DENYLIST_PREFIX}:${jti}`;
+  return buildPlatformKey(DENYLIST_PREFIX, {}) + `:${jti}`;
+}
+
+const clean = (claims) =>
+  Object.fromEntries(Object.entries(claims).filter(([, v]) => v !== undefined && v !== null));
+
+/** Active branch claim: explicit, else last active, else default. */
+function tenantBranch(user, branchId) {
+  const id = branchId ?? user.lastActiveBranch ?? user.defaultBranch;
+  return id ? String(id) : undefined;
 }
 
 class TokenService {
@@ -41,26 +51,33 @@ class TokenService {
    * @param {object} user hydrated or lean user document
    * @returns {{accessToken:string, refreshToken:string, expiresIn:string, tokenType:string}}
    */
-  issueTokens(user) {
-    const subject = String(user._id);
+  issueTokens(user, { branchId } = {}) {
+    const claims = {
+      sub: String(user._id),
+      role: user.role,
+      org: user.organization ? String(user.organization) : undefined,
+      br: tenantBranch(user, branchId),
+    };
     return {
       tokenType: 'Bearer',
       expiresIn: this.config.JWT_ACCESS_TTL,
-      accessToken: this.signAccessToken({ sub: subject, role: user.role }),
-      refreshToken: this.signRefreshToken({ sub: subject, role: user.role }),
+      accessToken: this.signAccessToken(claims),
+      refreshToken: this.signRefreshToken(claims),
     };
   }
 
-  signAccessToken({ sub, role }) {
-    return jwt.sign({ sub, role, type: TOKEN_TYPE.ACCESS }, this.config.JWT_ACCESS_SECRET, {
+  signAccessToken({ sub, role, org, br }) {
+    const claims = clean({ sub, role, org, br, type: TOKEN_TYPE.ACCESS });
+    return jwt.sign(claims, this.config.JWT_ACCESS_SECRET, {
       expiresIn: this.config.JWT_ACCESS_TTL,
       issuer: this.config.JWT_ISSUER,
       jwtid: crypto.randomUUID(),
     });
   }
 
-  signRefreshToken({ sub, role }) {
-    return jwt.sign({ sub, role, type: TOKEN_TYPE.REFRESH }, this.config.JWT_REFRESH_SECRET, {
+  signRefreshToken({ sub, role, org, br }) {
+    const claims = clean({ sub, role, org, br, type: TOKEN_TYPE.REFRESH });
+    return jwt.sign(claims, this.config.JWT_REFRESH_SECRET, {
       expiresIn: this.config.JWT_REFRESH_TTL,
       issuer: this.config.JWT_ISSUER,
       jwtid: crypto.randomUUID(),

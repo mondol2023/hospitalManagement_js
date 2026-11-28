@@ -3,6 +3,7 @@
 const { staffRepository } = require('../repositories');
 const ApiError = require('../utils/ApiError');
 const rosterScope = require('../utils/rosterScope');
+const { resolveName, named } = require('./departmentRefs');
 
 /**
  * Repository reads are lean, so the model's `toJSON` plugin never runs and
@@ -25,22 +26,22 @@ class StaffService {
   }
 
   /** Active staff for everyone; an administrator may widen it with `status`. */
-  list(query = {}, actor) {
+  async list(query = {}, actor) {
     const { isActive } = rosterScope(query, actor);
     const filter = { ...this.staff.searchFilter(query.search) };
     if (isActive !== undefined) filter.isActive = isActive;
     if (query.role) filter.role = query.role;
-    if (query.department) filter.department = query.department;
+    if (query.department) filter.department = await resolveName(query.department);
     return this.staff.paginate(filter, query, {
       projection: PRIVATE_PROJECTION,
-      populate: { path: 'user', select: 'name email phone' },
+      populate: [{ path: 'user', select: 'name email phone' }, named('department')],
     });
   }
 
   async getByUser(userId) {
     const profile = await this.staff.findByUser(userId, {
       projection: PRIVATE_PROJECTION,
-      populate: { path: 'user', select: 'name email phone profilePic' },
+      populate: [{ path: 'user', select: 'name email phone profilePic' }, named('department')],
     });
     if (!profile) throw ApiError.notFound('Staff profile');
     return profile;
@@ -59,7 +60,9 @@ class StaffService {
     }
     if (!Object.keys(update).length) throw ApiError.badRequest('No updatable fields supplied');
 
-    const profile = await this.staff.updateOne({ user: userId }, { $set: update });
+    if (update.department !== undefined) update.department = await resolveName(update.department);
+
+    const profile = await this.staff.updateOne({ user: userId }, { $set: update }, { populate: named('department') });
     if (!profile) throw ApiError.notFound('Staff profile');
     return profile;
   }
@@ -76,7 +79,9 @@ class StaffService {
     }
     if (!Object.keys(update).length) throw ApiError.badRequest('No updatable fields supplied');
 
-    const profile = await this.staff.updateById(staffProfileId, { $set: update });
+    if (update.department !== undefined) update.department = await resolveName(update.department);
+
+    const profile = await this.staff.updateById(staffProfileId, { $set: update }, { populate: named('department') });
     if (!profile) throw ApiError.notFound('Staff member');
     return profile;
   }

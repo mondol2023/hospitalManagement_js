@@ -301,3 +301,25 @@ describe('tokenService — consumeRefreshToken', () => {
     await expect(service.consumeRefreshToken(payload())).resolves.toBeUndefined();
   });
 });
+
+describe('tokenService — tenant claims', () => {
+  const service = new TokenService({ cache: fakeCache() });
+
+  it('issues org and br on both tokens; no org claim for a user without organization', () => {
+    const tenantUser = user({ organization: 'org-1', defaultBranch: 'br-1' });
+    const pair = service.issueTokens(tenantUser);
+    for (const token of [pair.accessToken, pair.refreshToken]) {
+      expect(decode(token)).toMatchObject({ org: 'org-1', br: 'br-1' });
+    }
+
+    const explicit = service.issueTokens(tenantUser, { branchId: 'br-2' });
+    expect(decode(explicit.accessToken).br).toBe('br-2');
+
+    const last = service.issueTokens({ ...tenantUser, lastActiveBranch: 'br-3' });
+    expect(decode(last.refreshToken).br).toBe('br-3');
+
+    const platform = service.issueTokens(user({ organization: null }));
+    expect(decode(platform.accessToken)).not.toHaveProperty('org');
+    expect(decode(platform.accessToken)).not.toHaveProperty('br');
+  });
+});

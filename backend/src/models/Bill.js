@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 const {
   BILL_STATUS,
   BILL_STATUS_VALUES,
@@ -70,7 +71,7 @@ const refundSchema = new mongoose.Schema(
 
 const billSchema = new mongoose.Schema(
   {
-    invoiceNumber: { type: String, unique: true, trim: true, uppercase: true },
+    invoiceNumber: { type: String, trim: true, uppercase: true },
     patient: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Patient',
@@ -112,10 +113,15 @@ const billSchema = new mongoose.Schema(
 );
 
 billSchema.plugin(toJSONPlugin);
+billSchema.plugin(tenantScoped, { scope: 'branch' });
 
 // --- Indexes ---------------------------------------------------------------
-billSchema.index({ patient: 1, createdAt: -1 });
-billSchema.index({ status: 1, dueDate: 1 });
+billSchema.index(
+  { organization: 1, invoiceNumber: 1 },
+  { unique: true, partialFilterExpression: { invoiceNumber: { $type: 'string' } } }
+);
+billSchema.index({ organization: 1, branch: 1, patient: 1, createdAt: -1 });
+billSchema.index({ organization: 1, branch: 1, status: 1, dueDate: 1 });
 
 // --- Hooks -----------------------------------------------------------------
 

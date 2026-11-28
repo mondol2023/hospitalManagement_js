@@ -2,6 +2,8 @@
 
 const logger = require('../config/logger');
 const { SOCKET_ROOMS } = require('../utils/constants');
+const context = require('../utils/context');
+const { TenantContextMissingError } = require('../utils/tenantErrors');
 
 /**
  * The one seam between business logic and Socket.IO.
@@ -46,6 +48,13 @@ class RealtimeService {
     }
   }
 
+  /** @private organisation of the current scope; throws rather than emit globally. */
+  _organizationId() {
+    const organizationId = context.get()?.organizationId;
+    if (!organizationId) throw new TenantContextMissingError();
+    return String(organizationId);
+  }
+
   toUser(userId, event, payload) {
     return this._emit(SOCKET_ROOMS.user(userId), event, payload);
   }
@@ -63,11 +72,11 @@ class RealtimeService {
 
   /** Every logged-in staff member — emergencies, hospital-wide announcements. */
   toStaff(event, payload) {
-    return this._emit(SOCKET_ROOMS.staff(), event, payload);
+    return this._emit(SOCKET_ROOMS.staff(this._organizationId()), event, payload);
   }
 
   toRole(role, event, payload) {
-    return this._emit(SOCKET_ROOMS.role(role), event, payload);
+    return this._emit(SOCKET_ROOMS.role(this._organizationId(), role), event, payload);
   }
 
   /**

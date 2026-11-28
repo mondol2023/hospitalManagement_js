@@ -3,6 +3,8 @@
 const { redisClient } = require('../config/redis');
 const env = require('../config/env');
 const logger = require('../config/logger');
+const context = require('../utils/context');
+const { TenantContextMissingError } = require('../utils/tenantErrors');
 
 /**
  * Read-through cache, never load-bearing: every method swallows its own failure and acts as a miss.
@@ -11,13 +13,31 @@ const logger = require('../config/logger');
 
 const NAMESPACE = 'hms:v1';
 
-/** Deterministic key builder — sorted params, so `?a=1&b=2` and `?b=2&a=1` hit. */
-function buildKey(prefix, params = {}) {
-  const parts = Object.keys(params)
+function serialize(params) {
+  return Object.keys(params)
     .filter((k) => params[k] !== undefined && params[k] !== null && params[k] !== '')
     .sort()
-    .map((k) => `${k}=${String(params[k])}`);
-  return parts.length ? `${NAMESPACE}:${prefix}:${parts.join('&')}` : `${NAMESPACE}:${prefix}`;
+    .map((k) => `${k}=${String(params[k])}`)
+    .join('&');
+}
+
+/** Tenant key root: `hms:v1:t:<org>:`. Throws when no organisation is bound. */
+function tenantRoot() {
+  const store = context.get();
+  if (!store || !store.organizationId) throw new TenantContextMissingError();
+  return `${NAMESPACE}:t:${store.organizationId}:`;
+}
+
+/** Tenant-scoped key; sorted params so `?a=1&b=2` and `?b=2&a=1` hit. */
+function buildKey(prefix, params = {}) {
+  const qs = serialize(params);
+  return `${tenantRoot()}${prefix}${qs ? `:${qs}` : ''}`;
+}
+
+/** Platform-wide key (no tenant); for denylists and counters only. */
+function buildPlatformKey(prefix, params = {}) {
+  const qs = serialize(params);
+  return `${NAMESPACE}:${prefix}${qs ? `:${qs}` : ''}`;
 }
 
 class CacheService {
@@ -65,10 +85,10 @@ class CacheService {
     }
   }
 
-  /** Drops every key under a prefix. */
+  /** Drops every key under a prefix, within the current organisation only. */
   async invalidate(prefix) {
+    const match = `${tenantRoot()}${prefix}*`;
     if (!this.isEnabled) return 0;
-    const match = `${NAMESPACE}:${prefix}*`;
     let cursor = '0';
     let removed = 0;
     try {
@@ -155,4 +175,5 @@ const cacheService = new CacheService(redisClient);
 module.exports = cacheService;
 module.exports.CacheService = CacheService;
 module.exports.buildKey = buildKey;
+module.exports.buildPlatformKey = buildPlatformKey;
 module.exports.NAMESPACE = NAMESPACE;

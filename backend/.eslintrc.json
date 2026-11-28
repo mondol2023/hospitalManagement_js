@@ -8,7 +8,9 @@
     "ecmaVersion": 2023,
     "sourceType": "script"
   },
-  "extends": ["eslint:recommended"],
+  "extends": [
+    "eslint:recommended"
+  ],
   "rules": {
     "no-unused-vars": [
       "error",
@@ -22,19 +24,82 @@
     "no-console": "error",
     "no-var": "error",
     "prefer-const": "error",
-    "eqeqeq": ["error", "smart"],
+    "eqeqeq": [
+      "error",
+      "smart"
+    ],
     "no-return-await": "error",
     "require-atomic-updates": "off",
-    "strict": ["error", "global"]
+    "strict": [
+      "error",
+      "global"
+    ],
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "MemberExpression[property.name='withoutTenant']",
+        "message": "withoutTenant is allowlisted; see docs/TENANCY.md"
+      },
+      {
+        "selector": "Property[key.name='withoutTenant']",
+        "message": "withoutTenant is allowlisted; see docs/TENANCY.md"
+      },
+      {
+        "selector": "MemberExpression[object.object.name='mongoose'][object.property.name='connection'][property.name='db']",
+        "message": "The raw driver bypasses tenantScoped; use scripts/ or config/database.js"
+      }
+    ]
   },
   "overrides": [
     {
-      "files": ["tests/**/*.js"],
-      "env": { "jest": true },
+      "files": [
+        "tests/**/*.js"
+      ],
+      "env": {
+        "jest": true
+      },
       "rules": {
         "no-unused-vars": [
           "error",
-          { "args": "after-used", "argsIgnorePattern": "^_", "ignoreRestSiblings": true }
+          {
+            "args": "after-used",
+            "argsIgnorePattern": "^_",
+            "ignoreRestSiblings": true
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/utils/context.js",
+        "src/middleware/authenticate.js",
+        "src/services/organizationResolver.js",
+        "src/services/organizationStatus.js",
+        "src/services/platformService.js",
+        "src/controllers/platformController.js",
+        "src/routes/platformRoutes.js",
+        "scripts/**",
+        "tests/**"
+      ],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
+    },
+    {
+      "files": [
+        "src/config/database.js"
+      ],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "MemberExpression[property.name='withoutTenant']",
+            "message": "withoutTenant is allowlisted"
+          },
+          {
+            "selector": "Property[key.name='withoutTenant']",
+            "message": "withoutTenant is allowlisted"
+          }
         ]
       }
     }

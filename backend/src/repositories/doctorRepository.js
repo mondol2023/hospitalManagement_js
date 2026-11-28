@@ -7,7 +7,7 @@ class DoctorRepository extends BaseRepository {
   constructor() {
     super(Doctor, {
       sortableFields: ['experienceInYears', 'consultationFeeCents', 'specialization'],
-      searchableFields: ['specialization', 'department', 'qualifications'],
+      searchableFields: ['specialization', 'qualifications'],
     });
   }
 
@@ -25,7 +25,7 @@ class DoctorRepository extends BaseRepository {
     return this.paginate(
       { ...filter, isActive: true, isAcceptingPatients: true },
       query,
-      { populate: { path: 'user', select: 'name email profilePic' } }
+      { populate: [{ path: 'user', select: 'name email profilePic' }, { path: 'department', select: 'name' }] }
     );
   }
 

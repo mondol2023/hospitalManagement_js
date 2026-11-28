@@ -1,6 +1,12 @@
 'use strict';
 
-const { CacheService, buildKey, NAMESPACE } = require('../../src/services/cacheService');
+const { CacheService, buildKey, NAMESPACE: ROOT } = require('../../src/services/cacheService');
+const context = require('../../src/utils/context');
+
+// Tenant keys live under `hms:v1:t:<org>:`; all tests here run as org `o1`.
+const NAMESPACE = `${ROOT}:t:o1`;
+beforeAll(() => context.setTestDefault({ organizationId: 'o1' }));
+afterAll(() => context.clearTestDefault());
 
 /**
  * The cache layer, tested against a fake that behaves like Redis — including

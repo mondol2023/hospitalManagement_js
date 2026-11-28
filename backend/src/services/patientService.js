@@ -233,7 +233,12 @@ class PatientService {
         { _id: { $in: userIds } },
         { projection: 'name profilePic', limit: userIds.length }
       ),
-      doctorId ? this.doctors.findByUser(doctorId, { projection: 'specialization department' }) : null,
+      doctorId
+        ? this.doctors.findByUser(doctorId, {
+            projection: 'specialization department',
+            populate: { path: 'department', select: 'name' },
+          })
+        : null,
     ]);
     const byId = new Map(users.map((user) => [String(user._id), user]));
 
@@ -250,7 +255,7 @@ class PatientService {
     const doctor = doctorId ? person(doctorId) : null;
     if (doctor && doctorProfile) {
       if (doctorProfile.specialization) doctor.specialization = doctorProfile.specialization;
-      if (doctorProfile.department) doctor.department = doctorProfile.department;
+      if (doctorProfile.department) doctor.department = doctorProfile.department.name;
     }
 
     return { primaryDoctor: doctor, nurses: nurseIds.map(person).filter(Boolean) };
@@ -266,7 +271,7 @@ class PatientService {
         dischargedAt: new Date(),
         ...(summary ? { medicalHistory: summary } : {}),
       },
-      $unset: { bed: '' },
+      $unset: { bed: '', admittedBranch: '' },
     });
     if (!patient) throw ApiError.notFound('Patient');
     logger.info('Patient discharged', { patientId: String(patientId) });

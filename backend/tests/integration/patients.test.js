@@ -281,7 +281,7 @@ describe('patients — the MRN lookup names who it found (B13)', () => {
 
     expect(body.user.name).toBe('Amina Yusuf');
     expect(body.bed.bedNumber).toBe('B-12');
-    expect(body.bed.ward).toBe('Ward B');
+    expect(body.bed.ward.name).toBe('Ward B');
   });
 
   it('does not expose contact details of the patient account', async () => {
@@ -343,7 +343,7 @@ describe('patients — a nurse’s caseload is their own', () => {
     const [row] = expectOk(res);
 
     expect(row.id).toBe(String(patient.profile._id));
-    expect(row.bed).toMatchObject({ bedNumber: 'ICU-07', ward: 'ICU' });
+    expect(row.bed).toMatchObject({ bedNumber: 'ICU-07', ward: { name: 'ICU' } });
   });
 
   it('is a nursing screen, so a doctor has no caseload here', async () => {

@@ -386,7 +386,7 @@ describe('users — changing a role migrates the profile', () => {
     expect(rows[0].employeeId).toBe(receptionist.profile.employeeId);
     expect(String(rows[0]._id)).toBe(String(receptionist.profile._id));
     // Fields the request did not mention are left as they were.
-    expect(rows[0].department).toBe('Admissions');
+    expect(String(rows[0].department)).toBe(String(receptionist.profile.department));
 
     const after = (await User.findById(receptionist.user._id)).tokensValidFrom;
     expect(after.getTime()).toBeGreaterThan(before.getTime());
@@ -679,5 +679,63 @@ describe('users — headcount', () => {
     // `idParam()` complaining that "statistics" is not an ObjectId.
     expect(res.status).toBe(200);
     expect(res.body.data.byRole).toBeDefined();
+  });
+});
+
+describe('users — branch membership', () => {
+  const { Branch } = require('../../src/models');
+  const context = require('../../src/utils/context');
+  const { TEST_ORG_ID, TEST_BRANCH_ID, makeTenant } = require('../helpers/tenant');
+
+  const setBranches = (headers, id, branchIds) =>
+    api().post(url(`/users/${id}/branches`)).set(headers).send({ branchIds });
+  const newBranch = (code) =>
+    context.withoutTenant('test:setup', () => Branch.create({ organization: TEST_ORG_ID, name: code, code }));
+
+  it('lets an admin replace a user\'s branches and repairs the default', async () => {
+    const admin = await createActor(ROLES.ADMIN);
+    const nurse = await createActor(ROLES.NURSE);
+    const b2 = await newBranch('B2');
+
+    const res = await setBranches(admin.headers, nurse.user._id, [String(b2._id)]);
+    expect(res.status).toBe(200);
+    const saved = await User.findById(nurse.user._id);
+    expect(saved.branches.map(String)).toEqual([String(b2._id)]);
+    // The old default (main) is no longer a member, so the first remaining branch takes over.
+    expect(String(saved.defaultBranch)).toBe(String(b2._id));
+    expect(String(TEST_BRANCH_ID)).not.toBe(String(b2._id));
+  });
+
+  it('rejects branch ids from another organisation with 404', async () => {
+    const admin = await createActor(ROLES.ADMIN);
+    const nurse = await createActor(ROLES.NURSE);
+    const other = await makeTenant();
+
+    const res = await setBranches(admin.headers, nurse.user._id, [String(other.branch._id)]);
+    expect(res.status).toBe(404);
+    expect((await User.findById(nurse.user._id)).branches).toHaveLength(1);
+  });
+
+  it('is admin only', async () => {
+    const doctor = await createActor(ROLES.DOCTOR);
+    const nurse = await createActor(ROLES.NURSE);
+    const res = await setBranches(doctor.headers, nurse.user._id, [String(TEST_BRANCH_ID)]);
+    expect(res.status).toBe(403);
+  });
+
+  it('refuses an empty membership for staff with a 400', async () => {
+    const admin = await createActor(ROLES.ADMIN);
+    const nurse = await createActor(ROLES.NURSE);
+    expectError(await setBranches(admin.headers, nurse.user._id, []), 400, 'BRANCH_REQUIRED');
+    expect((await User.findById(nurse.user._id)).branches).toHaveLength(1);
+  });
+
+  it('refuses duplicate ids and patients', async () => {
+    const admin = await createActor(ROLES.ADMIN);
+    const nurse = await createActor(ROLES.NURSE);
+    const patient = await createActor(ROLES.PATIENT);
+    const id = String(TEST_BRANCH_ID);
+    expect((await setBranches(admin.headers, nurse.user._id, [id, id])).status).toBe(422);
+    expect((await setBranches(admin.headers, patient.user._id, [id])).status).toBe(400);
   });
 });

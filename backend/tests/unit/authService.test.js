@@ -81,6 +81,7 @@ const fakeTokens = () => ({
   })),
   verifyRefreshToken: jest.fn(() => ({
     sub: 'user-1',
+    org: 'org-1',
     jti: 'jti-1',
     type: 'refresh',
     iat: nowSeconds(),
@@ -98,12 +99,18 @@ let users;
 let tokens;
 let profiles;
 let service;
+let resolver;
+let orgs;
 
 beforeEach(() => {
   users = fakeUsers();
   tokens = fakeTokens();
   profiles = fakeProfiles();
-  service = new AuthService({ users, tokens, profiles });
+  resolver = { resolve: jest.fn().mockResolvedValue({ organizationId: 'org-1' }) };
+  orgs = {
+    getInfo: jest.fn().mockResolvedValue({ status: 'active', defaultRegistrationBranch: 'br-1' }),
+  };
+  service = new AuthService({ users, tokens, profiles, resolver, orgs });
   // Standalone MongoDB — no session. The replica-set branch opts in per test.
   withTransaction.mockImplementation((fn) => fn(null));
 });
@@ -138,7 +145,7 @@ describe('register', () => {
       { session: null }
     );
     expect(profiles.createProfile).toHaveBeenCalledWith(
-      { userId: 'user-1', role: ROLES.PATIENT, profile: { bloodGroup: 'O+' } },
+      { userId: 'user-1', role: ROLES.PATIENT, profile: { bloodGroup: 'O+', registeredAtBranch: 'br-1' } },
       { session: null }
     );
     expect(result).toEqual({
@@ -356,6 +363,7 @@ describe('refresh', () => {
   it('rejects a token minted before a logout-everywhere', async () => {
     tokens.verifyRefreshToken.mockReturnValue({
       sub: 'user-1',
+      org: 'org-1',
       jti: 'jti-1',
       iat: Math.floor(new Date('2026-01-01T00:00:00Z').getTime() / 1000),
     });

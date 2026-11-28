@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 const { CONVERSATION_TYPE, CONVERSATION_TYPE_VALUES } = require('../utils/constants');
 
 /**
@@ -54,7 +55,8 @@ const conversationSchema = new mongoose.Schema(
     patient: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient', default: null },
     title: { type: String, trim: true, maxlength: 200 },
     /** Scopes a `staff_only` thread to a ward or department. */
-    department: { type: String, trim: true },
+    department: { type: mongoose.Schema.Types.ObjectId, ref: 'Department' },
+    legacyDepartment: { type: String, trim: true, select: false },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     /**
      * Deterministic key for `direct` threads, so repeatedly opening a chat with
@@ -77,17 +79,18 @@ const conversationSchema = new mongoose.Schema(
 );
 
 conversationSchema.plugin(toJSONPlugin);
+conversationSchema.plugin(tenantScoped, { scope: 'organization' });
 
 // --- Indexes ---------------------------------------------------------------
 // The inbox: "my threads, most recent first". Multikey on participants; without
 // this every inbox load is a full collection scan.
-conversationSchema.index({ participants: 1, lastMessageAt: -1 });
+conversationSchema.index({ organization: 1, participants: 1, lastMessageAt: -1 });
 // A patient's care-team thread, and the ward's staff threads.
-conversationSchema.index({ patient: 1, type: 1 });
-conversationSchema.index({ type: 1, department: 1, lastMessageAt: -1 });
+conversationSchema.index({ organization: 1, patient: 1, type: 1 });
+conversationSchema.index({ organization: 1, type: 1, department: 1, lastMessageAt: -1 });
 // One thread per staff pair.
 conversationSchema.index(
-  { directKey: 1 },
+  { organization: 1, directKey: 1 },
   { unique: true, partialFilterExpression: { directKey: { $type: 'string' } } }
 );
 

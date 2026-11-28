@@ -1,6 +1,11 @@
 'use strict';
 
-const { CacheService, NAMESPACE } = require('../../src/services/cacheService');
+const { CacheService, NAMESPACE: ROOT } = require('../../src/services/cacheService');
+const context = require('../../src/utils/context');
+
+const NAMESPACE = `${ROOT}:t:o1`;
+beforeAll(() => context.setTestDefault({ organizationId: 'o1' }));
+afterAll(() => context.clearTestDefault());
 
 describe('cache.namespace', () => {
   const cache = new CacheService(null);

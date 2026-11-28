@@ -2,6 +2,10 @@
 
 const BaseRepository = require('./BaseRepository');
 const { Patient } = require('../models');
+const context = require('../utils/context');
+
+/** Admission is branch-specific while Patient is organisation-scoped. */
+const activeBranch = () => context.activeBranchId();
 
 class PatientRepository extends BaseRepository {
   constructor() {
@@ -23,7 +27,7 @@ class PatientRepository extends BaseRepository {
       {
         populate: [
           { path: 'user', select: 'name avatar' },
-          { path: 'bed', select: 'bedNumber ward' },
+          { path: 'bed', select: 'bedNumber ward', populate: { path: 'ward', select: 'name' } },
         ],
       }
     );
@@ -39,20 +43,20 @@ class PatientRepository extends BaseRepository {
 
   /** A nurse's caseload — the first query of every shift. Uses the multikey index. */
   assignedTo(nurseUserId, query = {}) {
-    return this.paginate({ assignedNurses: nurseUserId, isAdmitted: true }, query, {
+    return this.paginate({ assignedNurses: nurseUserId, isAdmitted: true, admittedBranch: activeBranch() }, query, {
       populate: [
         { path: 'user', select: 'name phone' },
-        { path: 'bed', select: 'bedNumber ward' },
+        { path: 'bed', select: 'bedNumber ward', populate: { path: 'ward', select: 'name' } },
       ],
     });
   }
 
   /** Ward census board. */
   admittedInWard(ward, query = {}) {
-    return this.paginate({ ward, isAdmitted: true }, query, {
+    return this.paginate({ ward, isAdmitted: true, admittedBranch: activeBranch() }, query, {
       populate: [
         { path: 'user', select: 'name phone' },
-        { path: 'bed', select: 'bedNumber ward type status' },
+        { path: 'bed', select: 'bedNumber ward type status', populate: { path: 'ward', select: 'name' } },
       ],
     });
   }

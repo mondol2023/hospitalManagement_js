@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 
 /**
  * Pharmacy inventory.
@@ -39,11 +40,12 @@ const medicineSchema = new mongoose.Schema(
 );
 
 medicineSchema.plugin(toJSONPlugin);
+medicineSchema.plugin(tenantScoped, { scope: 'branch' });
 
 // --- Indexes ---------------------------------------------------------------
-medicineSchema.index({ name: 1, batchNumber: 1 }, { unique: true });
+medicineSchema.index({ organization: 1, branch: 1, name: 1, batchNumber: 1 }, { unique: true });
 // Expiry sweep and the "expiring soon" report.
-medicineSchema.index({ expiryDate: 1, isActive: 1 });
+medicineSchema.index({ organization: 1, branch: 1, expiryDate: 1, isActive: 1 });
 // Search-by-name on the dispensing screen.
 medicineSchema.index({ name: 'text', genericName: 'text' });
 

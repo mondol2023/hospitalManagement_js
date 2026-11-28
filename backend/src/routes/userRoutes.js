@@ -28,6 +28,7 @@ router
   .patch(validate(schemas.update), controller.update);
 
 router.patch('/:id/role', validate(schemas.changeRole), controller.changeRole);
+router.post('/:id/branches', validate(schemas.setBranches), controller.setBranches);
 router.patch('/:id/active', validate(schemas.setActive), controller.setActive);
 
 module.exports = router;

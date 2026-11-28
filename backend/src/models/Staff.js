@@ -56,7 +56,7 @@ staffSchema.plugin(toJSONPlugin);
 
 // --- Indexes ---------------------------------------------------------------
 // The staff directory: filter by role, then by department.
-staffSchema.index({ role: 1, isActive: 1 });
-staffSchema.index({ reportsTo: 1 });
+staffSchema.index({ organization: 1, role: 1, isActive: 1 });
+staffSchema.index({ organization: 1, reportsTo: 1 });
 
 module.exports = mongoose.model('Staff', staffSchema);

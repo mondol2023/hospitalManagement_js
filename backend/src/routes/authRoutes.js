@@ -26,6 +26,7 @@ router.use(authenticate);
 
 router.get('/me', controller.me);
 router.post('/logout-all', controller.logoutEverywhere);
+router.post('/switch-branch', authLimiter, validate(schemas.switchBranch), controller.switchBranch);
 router.post('/change-password', validate(schemas.changePassword), controller.changePassword);
 
 module.exports = router;

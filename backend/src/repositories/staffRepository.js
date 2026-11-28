@@ -7,7 +7,7 @@ class StaffRepository extends BaseRepository {
   constructor() {
     super(Staff, {
       sortableFields: ['designation', 'role', 'joinedAt'],
-      searchableFields: ['designation', 'department', 'employeeId'],
+      searchableFields: ['designation', 'employeeId'],
     });
   }
 
@@ -26,6 +26,7 @@ class StaffRepository extends BaseRepository {
     return this.model
       .find({ reportsTo: managerUserId, isActive: true })
       .select('user designation role department')
+      .populate({ path: 'department', select: 'name' })
       .lean()
       .exec();
   }

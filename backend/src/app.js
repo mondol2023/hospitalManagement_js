@@ -14,6 +14,7 @@ const {
   helmetMiddleware,
   sanitizeMiddleware,
   hppMiddleware,
+  tenantContext,
   globalLimiter,
   errorHandler,
   notFoundHandler,
@@ -63,6 +64,7 @@ function createApp() {
   app.use(express.urlencoded({ extended: false, limit: env.BODY_LIMIT }));
   app.use(sanitizeMiddleware());
   app.use(hppMiddleware());
+  app.use(tenantContext);
 
   if (!env.isTest) {
     app.use(

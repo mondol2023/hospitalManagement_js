@@ -5,6 +5,7 @@ const ApiError = require('../utils/ApiError');
 const logger = require('../config/logger');
 const cacheService = require('./cacheService');
 const rosterScope = require('../utils/rosterScope');
+const { resolveName, named } = require('./departmentRefs');
 
 const CACHE_PREFIX = 'doctors';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -35,7 +36,7 @@ class DoctorService {
     const scope = rosterScope(query, actor);
     const filter = { ...this.doctors.searchFilter(query.search) };
     if (query.specialization) filter.specialization = query.specialization;
-    if (query.department) filter.department = query.department;
+    if (query.department) filter.department = await resolveName(query.department);
 
     const key = this.ns.key('list', {
       scope: scope.admin ? 'admin' : 'public',
@@ -60,14 +61,14 @@ class DoctorService {
 
   async getById(doctorProfileId) {
     const doctor = await this.doctors.findByIdOrThrow(doctorProfileId, 'Doctor', {
-      populate: { path: 'user', select: 'name email phone profilePic' },
+      populate: [{ path: 'user', select: 'name email phone profilePic' }, named('department')],
     });
     return doctor;
   }
 
   async getByUser(userId) {
     const doctor = await this.doctors.findByUser(userId, {
-      populate: { path: 'user', select: 'name email phone profilePic' },
+      populate: [{ path: 'user', select: 'name email phone profilePic' }, named('department')],
     });
     if (!doctor) throw ApiError.notFound('Doctor profile');
     return doctor;
@@ -103,7 +104,9 @@ class DoctorService {
     }
     if (!Object.keys(update).length) throw ApiError.badRequest('No updatable fields supplied');
 
-    const doctor = await this.doctors.updateOne({ user: userId }, { $set: update });
+    if (update.department !== undefined) update.department = await resolveName(update.department);
+
+    const doctor = await this.doctors.updateOne({ user: userId }, { $set: update }, { populate: named('department') });
     if (!doctor) throw ApiError.notFound('Doctor profile');
 
     await this.ns.invalidate();
@@ -120,6 +123,7 @@ class DoctorService {
     for (const field of ['department', 'shift', 'isAcceptingPatients']) {
       if (patch[field] !== undefined) update[field] = patch[field];
     }
+    if (update.department !== undefined) update.department = await resolveName(update.department);
 
     const updated = await this.doctors.updateById(doctorProfileId, { $set: update });
     if (!updated) throw ApiError.notFound('Doctor');

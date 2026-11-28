@@ -20,6 +20,7 @@ const signupPayload = (overrides = {}) => ({
   email: `ada-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@hospital.test`,
   password: DEFAULT_PASSWORD,
   phone: '+15550001111',
+  organizationCode: 'TEST',
   profile: {
     age: 34,
     gender: 'female',

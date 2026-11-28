@@ -45,8 +45,8 @@ nurseSchema.plugin(toJSONPlugin);
 // --- Indexes ---------------------------------------------------------------
 // "Which nurses cover ward X and are on duty?" — multikey on assignedWards.
 // This is the fan-out query for every bedside alert, so it must not scan.
-nurseSchema.index({ assignedWards: 1, isOnDuty: 1, isActive: 1 });
-nurseSchema.index({ grade: 1 });
+nurseSchema.index({ organization: 1, assignedWards: 1, isOnDuty: 1, isActive: 1 });
+nurseSchema.index({ organization: 1, grade: 1 });
 
 /**
  * A nurse with no ward assignment is unrestricted; otherwise the ward must be

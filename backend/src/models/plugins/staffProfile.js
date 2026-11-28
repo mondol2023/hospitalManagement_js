@@ -1,6 +1,7 @@
 'use strict';
 
 const mongoose = require('mongoose');
+const tenantScoped = require('./tenantScoped');
 const { SHIFTS, SHIFT_VALUES } = require('../../utils/constants');
 
 /**
@@ -22,17 +23,17 @@ function staffProfilePlugin(schema, options = {}) {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      unique: true,
     },
     employeeId: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
       uppercase: true,
       maxlength: 32,
     },
-    department: { type: String, trim: true, maxlength: 120 },
+    department: { type: mongoose.Schema.Types.ObjectId, ref: 'Department' },
+    /** Pre-migration-002 text, kept for one release. */
+    legacyDepartment: { type: String, trim: true, select: false },
     shift: {
       type: String,
       enum: SHIFT_VALUES,
@@ -47,8 +48,12 @@ function staffProfilePlugin(schema, options = {}) {
     isActive: { type: Boolean, default: true },
   });
 
+  schema.plugin(tenantScoped, { scope: 'organization' });
+  schema.index({ organization: 1, user: 1 }, { unique: true });
+  schema.index({ organization: 1, employeeId: 1 }, { unique: true });
+
   // "Who is on duty in the ICU right now?" — the roster board's only query.
-  schema.index({ department: 1, isOnDuty: 1, isActive: 1 });
+  schema.index({ organization: 1, department: 1, isOnDuty: 1, isActive: 1 });
 
   /** Resolve a profile from the authenticated user id. */
   schema.statics.findByUser = function findByUser(userId) {

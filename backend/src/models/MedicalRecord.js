@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 const { buildVitalsSchema } = require('./schemas/vitals');
 
 /**
@@ -52,12 +53,13 @@ const medicalRecordSchema = new mongoose.Schema(
 );
 
 medicalRecordSchema.plugin(toJSONPlugin);
+medicalRecordSchema.plugin(tenantScoped, { scope: 'branch' });
 
 // --- Indexes ---------------------------------------------------------------
 // A patient's chart, most recent visit first — the single hottest clinical read.
-medicalRecordSchema.index({ patient: 1, visitDate: -1 });
-medicalRecordSchema.index({ doctor: 1, visitDate: -1 });
-medicalRecordSchema.index({ followUpDate: 1 });
+medicalRecordSchema.index({ organization: 1, branch: 1, patient: 1, visitDate: -1 });
+medicalRecordSchema.index({ organization: 1, branch: 1, doctor: 1, visitDate: -1 });
+medicalRecordSchema.index({ organization: 1, branch: 1, followUpDate: 1 });
 
 /**
  * One record per appointment. The service checks first and answers with a
@@ -65,7 +67,7 @@ medicalRecordSchema.index({ followUpDate: 1 });
  * the many records written without an appointment never collide.
  */
 medicalRecordSchema.index(
-  { appointment: 1 },
+  { organization: 1, branch: 1, appointment: 1 },
   {
     unique: true,
     name: 'uniq_record_per_appointment',

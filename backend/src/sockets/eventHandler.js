@@ -3,6 +3,8 @@
 const logger = require('../config/logger');
 const ApiError = require('../utils/ApiError');
 const { normalise } = require('../middleware/errorHandler');
+const { tenantStoreFor } = require('../middleware/authenticate');
+const context = require('../utils/context');
 
 /**
  * The socket equivalent of `asyncHandler` + `validate` + `errorHandler`.
@@ -84,7 +86,10 @@ function on(socket, event, schema, handler) {
       }
 
       const data = schema.parse(payload ?? {});
-      const result = await handler(data, socket);
+      // Each event enters its tenant here, so no gateway needs to know about it.
+      const actor = socket.data.user;
+      const store = { requestId: socket.id, source: 'socket', ...(actor ? tenantStoreFor(actor) : {}) };
+      const result = await context.run(store, () => handler(data, socket));
       respond(callback, { success: true, data: result === undefined ? null : result });
     } catch (error) {
       const envelope = toEnvelope(error, event, socket);

@@ -2,6 +2,7 @@
 
 const mongoose = require('mongoose');
 const toJSONPlugin = require('./plugins/toJSON');
+const tenantScoped = require('./plugins/tenantScoped');
 const {
   APPOINTMENT_STATUS,
   APPOINTMENT_STATUS_VALUES,
@@ -48,14 +49,15 @@ const appointmentSchema = new mongoose.Schema(
 );
 
 appointmentSchema.plugin(toJSONPlugin);
+appointmentSchema.plugin(tenantScoped, { scope: 'branch' });
 
 // --- Indexes ---------------------------------------------------------------
 // Doctor's day view and clash detection.
-appointmentSchema.index({ doctor: 1, scheduledAt: 1 });
+appointmentSchema.index({ organization: 1, branch: 1, doctor: 1, scheduledAt: 1 });
 // Patient's history, newest first.
-appointmentSchema.index({ patient: 1, scheduledAt: -1 });
+appointmentSchema.index({ organization: 1, branch: 1, patient: 1, scheduledAt: -1 });
 // Dashboard queries: "today's confirmed appointments".
-appointmentSchema.index({ status: 1, scheduledAt: 1 });
+appointmentSchema.index({ organization: 1, branch: 1, status: 1, scheduledAt: 1 });
 
 /**
  * Database-level double-booking guard. Application checks race under concurrent
@@ -63,7 +65,7 @@ appointmentSchema.index({ status: 1, scheduledAt: 1 });
  * cancelled slot can be rebooked.
  */
 appointmentSchema.index(
-  { doctor: 1, scheduledAt: 1 },
+  { organization: 1, branch: 1, doctor: 1, scheduledAt: 1 },
   {
     unique: true,
     name: 'uniq_doctor_slot_active',

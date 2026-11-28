@@ -8,9 +8,9 @@ const authService = require('../services/authService');
  * method, send the envelope.
  */
 
-const register = handle.created((req) => authService.register(req.body));
+const register = handle.created((req) => authService.register({ ...req.body, host: req.hostname }));
 
-const login = handle((req) => authService.login(req.body));
+const login = handle((req) => authService.login({ ...req.body, host: req.hostname }));
 
 const refresh = handle((req) => authService.refresh(req.body.refreshToken));
 
@@ -18,8 +18,10 @@ const logout = handle((req) => authService.logout(req.body.refreshToken));
 
 const logoutEverywhere = handle((req) => authService.logoutEverywhere(req.user.id));
 
+const switchBranch = handle((req) => authService.switchBranch(req.user.id, req.body));
+
 const changePassword = handle((req) => authService.changePassword(req.user.id, req.body));
 
 const me = handle((req) => authService.me(req.user.id));
 
-module.exports = { register, login, refresh, logout, logoutEverywhere, changePassword, me };
+module.exports = { register, login, refresh, logout, logoutEverywhere, switchBranch, changePassword, me };

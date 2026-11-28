@@ -19,16 +19,25 @@ const ROLES = Object.freeze({
   PHARMACIST: 'pharmacist',
   ACCOUNTANT: 'accountant',
   PATIENT: 'patient',
+  /** Operates the platform itself: belongs to no organisation, reaches only /platform routes. */
+  PLATFORM_ADMIN: 'platform_admin',
 });
 
 const ROLE_VALUES = Object.freeze(Object.values(ROLES));
+
+/** Roles a tenant admin may assign through the API. `platform_admin` is never one of them. */
+const TENANT_ADMIN_ASSIGNABLE_ROLES = Object.freeze(
+  ROLE_VALUES.filter((role) => role !== ROLES.PLATFORM_ADMIN)
+);
 
 /**
  * Everyone employed by the hospital. This is the access boundary for clinical
  * and operational data: a `patient` is authenticated but is *not* staff, and no
  * ward-wide record is ever exposed to one.
  */
-const STAFF_ROLES = Object.freeze(ROLE_VALUES.filter((role) => role !== ROLES.PATIENT));
+const STAFF_ROLES = Object.freeze(
+  ROLE_VALUES.filter((role) => role !== ROLES.PATIENT && role !== ROLES.PLATFORM_ADMIN)
+);
 
 /** Roles permitted to act on clinical records of any patient. */
 const CLINICAL_ROLES = Object.freeze([ROLES.DOCTOR, ROLES.NURSE]);
@@ -61,6 +70,38 @@ const ROLE_PROFILE_MODEL = Object.freeze({
 const STAFF_PROFILE_ROLES = Object.freeze(
   Object.keys(ROLE_PROFILE_MODEL).filter((role) => ROLE_PROFILE_MODEL[role] === 'Staff')
 );
+
+const ORGANIZATION_STATUS = Object.freeze({
+  TRIAL: 'trial',
+  ACTIVE: 'active',
+  SUSPENDED: 'suspended',
+});
+const ORGANIZATION_STATUS_VALUES = Object.freeze(Object.values(ORGANIZATION_STATUS));
+
+const ORGANIZATION_PLAN = Object.freeze({
+  STARTER: 'starter',
+  PROFESSIONAL: 'professional',
+  ENTERPRISE: 'enterprise',
+});
+const ORGANIZATION_PLAN_VALUES = Object.freeze(Object.values(ORGANIZATION_PLAN));
+
+const BRANCH_TYPE = Object.freeze({
+  HOSPITAL: 'hospital',
+  CLINIC: 'clinic',
+  DIAGNOSTIC_CENTER: 'diagnostic_center',
+  PHARMACY: 'pharmacy',
+});
+const BRANCH_TYPE_VALUES = Object.freeze(Object.values(BRANCH_TYPE));
+
+const DEPARTMENT_TYPE = Object.freeze({
+  CLINICAL: 'clinical',
+  SUPPORT: 'support',
+  ADMIN: 'admin',
+});
+const DEPARTMENT_TYPE_VALUES = Object.freeze(Object.values(DEPARTMENT_TYPE));
+
+/** Subdomains an organisation may not claim. */
+const RESERVED_SUBDOMAINS = Object.freeze(['www', 'api', 'app', 'admin', 'platform']);
 
 const SHIFTS = Object.freeze({
   MORNING: 'morning',
@@ -282,13 +323,19 @@ const SOCKET_EVENTS = Object.freeze({
   CARE_LOG_FLAGGED: 'care:flagged',
 });
 
+/** Role-derived rooms are per organisation; a missing id must never fall back to a global room. */
+function requireOrg(organizationId) {
+  if (!organizationId) throw new Error('An organization id is required for this socket room');
+  return organizationId;
+}
+
 /** Socket room naming, centralised so publisher and subscriber cannot disagree. */
 const SOCKET_ROOMS = Object.freeze({
   user: (userId) => `user:${userId}`,
   conversation: (conversationId) => `conversation:${conversationId}`,
   /** Every logged-in employee. Carries ward-wide clinical traffic. */
-  staff: () => 'role:staff',
-  role: (role) => `role:${role}`,
+  staff: (organizationId) => `org:${requireOrg(organizationId)}:staff`,
+  role: (organizationId, role) => `org:${requireOrg(organizationId)}:role:${role}`,
   /** Care-team feed for one patient — clinicians only. */
   patientCare: (patientId) => `care:${patientId}`,
 });
@@ -302,6 +349,16 @@ const PAGINATION = Object.freeze({
 module.exports = {
   ROLES,
   ROLE_VALUES,
+  TENANT_ADMIN_ASSIGNABLE_ROLES,
+  ORGANIZATION_STATUS,
+  ORGANIZATION_STATUS_VALUES,
+  ORGANIZATION_PLAN,
+  ORGANIZATION_PLAN_VALUES,
+  BRANCH_TYPE,
+  BRANCH_TYPE_VALUES,
+  DEPARTMENT_TYPE,
+  DEPARTMENT_TYPE_VALUES,
+  RESERVED_SUBDOMAINS,
   STAFF_ROLES,
   CLINICAL_ROLES,
   CARE_TEAM_ROLES,
