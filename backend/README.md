@@ -18,6 +18,7 @@ re-checks) authorizes them.
 - [Architecture](#architecture)
 - [Domains / API surface](#domains--api-surface)
 - [Access control](#access-control)
+- [Multi-tenancy](#multi-tenancy)
 - [Real-time (Socket.io)](#real-time-socketio)
 - [Testing](#testing)
 - [Project layout](#project-layout)
@@ -188,6 +189,10 @@ Roles (single source of truth in
 `nurse`, `receptionist`, `pharmacist`, `accountant`, `patient`. Everything
 except `patient` is "staff" for access-boundary purposes — no ward-wide
 clinical or operational record is ever exposed to a patient account.
+
+## Multi-tenancy
+
+Every document belongs to an organisation (operational ones also to a branch), and a query without a tenant throws. See the developer guide: [docs/TENANCY.md](../docs/TENANCY.md).
 
 ## Real-time (Socket.io)
 
