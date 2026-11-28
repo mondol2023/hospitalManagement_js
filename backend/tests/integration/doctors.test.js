@@ -2,7 +2,7 @@
 
 const mongoose = require('mongoose');
 const { api, url, expectOk, expectError } = require('../helpers/api');
-const { createActor } = require('../helpers/factories');
+const { createActor, ensureDepartment } = require('../helpers/factories');
 const { ROLES } = require('../../src/utils/constants');
 
 const idOf = (doc) => String(doc._id || doc.id);
@@ -16,6 +16,7 @@ describe('doctors — employment set by an administrator', () => {
   it('lets an administrator change department, shift and acceptance', async () => {
     const admin = await createActor(ROLES.ADMIN);
     const doctor = await createActor(ROLES.DOCTOR);
+    await ensureDepartment('Cardiology');
 
     const res = await api()
       .patch(url(`/doctors/${doctor.profile.id}/employment`))
@@ -23,8 +24,9 @@ describe('doctors — employment set by an administrator', () => {
       .send({ department: 'Cardiology', shift: 'night', isAcceptingPatients: false });
     const updated = expectOk(res);
 
+    // A department is a reference; the API returns it as `{ id, name }`.
     expect(updated).toMatchObject({
-      department: 'Cardiology',
+      department: { name: 'Cardiology' },
       shift: 'night',
       isAcceptingPatients: false,
     });
@@ -34,13 +36,14 @@ describe('doctors — employment set by an administrator', () => {
   it('lets a manager do the same', async () => {
     const manager = await createActor(ROLES.MANAGER);
     const doctor = await createActor(ROLES.DOCTOR);
+    await ensureDepartment('Neurology');
 
     const res = await api()
       .patch(url(`/doctors/${doctor.profile.id}/employment`))
       .set(manager.headers)
       .send({ department: 'Neurology' });
 
-    expect(expectOk(res).department).toBe('Neurology');
+    expect(expectOk(res).department.name).toBe('Neurology');
   });
 
   it('leaves the fields it was not sent alone', async () => {
@@ -55,7 +58,7 @@ describe('doctors — employment set by an administrator', () => {
       .send({ shift: 'evening' });
     const updated = expectOk(res);
 
-    expect(updated.department).toBe('Oncology');
+    expect(updated.department.name).toBe('Oncology');
     expect(updated.consultationFeeCents).toBe(5000);
   });
 
@@ -73,6 +76,7 @@ describe('doctors — employment set by an administrator', () => {
   it('ignores clinical fields it does not own', async () => {
     const admin = await createActor(ROLES.ADMIN);
     const doctor = await createActor(ROLES.DOCTOR, { profile: { consultationFeeCents: 5000 } });
+    await ensureDepartment('ENT');
 
     const res = await api()
       .patch(url(`/doctors/${doctor.profile.id}/employment`))
@@ -80,7 +84,7 @@ describe('doctors — employment set by an administrator', () => {
       .send({ department: 'ENT', consultationFeeCents: 1 });
     const updated = expectOk(res);
 
-    expect(updated.department).toBe('ENT');
+    expect(updated.department.name).toBe('ENT');
     expect(updated.consultationFeeCents).toBe(5000);
   });
 
@@ -98,6 +102,7 @@ describe('doctors — employment set by an administrator', () => {
 
   it('returns 404 for a doctor that does not exist', async () => {
     const admin = await createActor(ROLES.ADMIN);
+    await ensureDepartment('ENT');
 
     const res = await api()
       .patch(url(`/doctors/${new mongoose.Types.ObjectId()}/employment`))

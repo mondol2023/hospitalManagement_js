@@ -3,6 +3,7 @@
 const { DoctorService } = require('../../src/services/doctorService');
 const { CacheService } = require('../../src/services/cacheService');
 const { ROLES } = require('../../src/utils/constants');
+const context = require('../../src/utils/context');
 
 /**
  * The doctor directory is cached, and Redis is off in the integration suite, so
@@ -43,6 +44,9 @@ const build = () => {
     appointments: {},
     cache: new CacheService(fakeRedis()),
   });
+  // Cache keys are tenant-prefixed, so a read only works inside a tenant context.
+  const list = service.list.bind(service);
+  service.list = (...args) => context.run({ organizationId: 'org-test' }, () => list(...args));
   return { service, doctors };
 };
 

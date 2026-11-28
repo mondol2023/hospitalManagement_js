@@ -88,7 +88,11 @@ async function patients({ tenant }) {
 
 async function doctors({ tenant }) {
   const doctor = await createActor(ROLES.DOCTOR, { tenant });
-  return { ids: { id: oid(doctor.profile), userId: oid(doctor.user) }, extra: [oid(doctor.user)] };
+  return {
+    ids: { id: oid(doctor.profile), userId: oid(doctor.user) },
+    bodies: { 'PATCH /doctors/:id/employment': { shift: 'night' } },
+    extra: [oid(doctor.user)],
+  };
 }
 
 async function nurses({ tenant }) {
