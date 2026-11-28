@@ -3,6 +3,7 @@
 const { api, url, expectOk, expectError } = require('../helpers/api');
 const { createActor, createAdmittedPatient } = require('../helpers/factories');
 const { Medicine, Notification, StockMovement } = require('../../src/models');
+const { medicineRepository } = require('../../src/repositories');
 const { ROLES, NOTIFICATION_TYPE } = require('../../src/utils/constants');
 
 // Who hears about low stock, who restocked, and how much: the admin's view of the pharmacy.
@@ -139,6 +140,106 @@ describe('stock ledger — who moved what', () => {
     expectError(await post(`/medicines/${medicine._id}/dispense`, pharmacist, { quantity: 5 }), 409);
 
     expect(await StockMovement.countDocuments({ medicine: medicine._id })).toBe(0);
+  });
+});
+
+describe('withdraw expired — a write-off, not a flag', () => {
+  const expired = (overrides = {}) =>
+    createMedicine({ expiryDate: new Date(Date.now() - 2 * DAY), ...overrides });
+
+  it('zeroes the batch, takes it out of circulation and records who wrote it off', async () => {
+    const pharmacist = await createActor(ROLES.PHARMACIST);
+    const batch = await expired({ name: 'Amoxicillin', quantity: 120, unit: 'capsule' });
+
+    const result = expectOk(await post('/medicines/withdraw-expired', pharmacist));
+
+    expect(result).toMatchObject({ withdrawn: 1, units: 120 });
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: String(batch._id),
+        name: 'Amoxicillin',
+        batchNumber: batch.batchNumber,
+        quantity: 120,
+        unit: 'capsule',
+      }),
+    ]);
+
+    const after = await Medicine.findById(batch._id).lean();
+    expect(after).toMatchObject({ isActive: false, quantity: 0 });
+
+    const entries = await StockMovement.find({ medicine: batch._id }).lean();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      kind: 'withdrawn',
+      delta: -120,
+      onHand: 0,
+      reason: 'Expired — written off',
+    });
+    expect(String(entries[0].actor)).toBe(String(pharmacist.user._id));
+  });
+
+  it('writes nothing the second time it runs', async () => {
+    const pharmacist = await createActor(ROLES.PHARMACIST);
+    const batch = await expired({ quantity: 30 });
+
+    expectOk(await post('/medicines/withdraw-expired', pharmacist));
+    const again = expectOk(await post('/medicines/withdraw-expired', pharmacist));
+
+    expect(again).toEqual({ withdrawn: 0, units: 0, items: [] });
+    expect(await StockMovement.countDocuments({ medicine: batch._id })).toBe(1);
+  });
+
+  it('leaves a batch alone when it was dispensed between the read and the write', async () => {
+    const pharmacist = await createActor(ROLES.PHARMACIST);
+    const batch = await expired({ quantity: 100 });
+
+    // The sweep reads 100; before it writes, 10 units go over the counter.
+    const read = medicineRepository.expiringBefore.bind(medicineRepository);
+    const spy = jest.spyOn(medicineRepository, 'expiringBefore').mockImplementationOnce(async (date) => {
+      const snapshot = await read(date);
+      await Medicine.updateOne({ _id: batch._id }, { $inc: { quantity: -10 } });
+      return snapshot;
+    });
+
+    try {
+      const result = expectOk(await post('/medicines/withdraw-expired', pharmacist));
+      expect(result).toEqual({ withdrawn: 0, units: 0, items: [] });
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(await Medicine.findById(batch._id).lean()).toMatchObject({ isActive: true, quantity: 90 });
+    expect(await StockMovement.countDocuments({ medicine: batch._id })).toBe(0);
+  });
+
+  it('does not touch stock that is still in date or already withdrawn', async () => {
+    const pharmacist = await createActor(ROLES.PHARMACIST);
+    const fresh = await createMedicine({ quantity: 40 });
+    const old = await expired({ quantity: 15, isActive: false });
+
+    const result = expectOk(await post('/medicines/withdraw-expired', pharmacist));
+
+    expect(result).toEqual({ withdrawn: 0, units: 0, items: [] });
+    expect(await Medicine.findById(fresh._id).lean()).toMatchObject({ isActive: true, quantity: 40 });
+    expect(await Medicine.findById(old._id).lean()).toMatchObject({ isActive: false, quantity: 15 });
+  });
+
+  it('refuses an accountant', async () => {
+    const accountant = await createActor(ROLES.ACCOUNTANT);
+    const batch = await expired({ quantity: 5 });
+
+    expectError(await post('/medicines/withdraw-expired', accountant), 403);
+
+    expect(await Medicine.findById(batch._id).lean()).toMatchObject({ isActive: true, quantity: 5 });
+  });
+
+  it('includes the unit on the expiring list', async () => {
+    const pharmacist = await createActor(ROLES.PHARMACIST);
+    await createMedicine({ unit: 'ml', expiryDate: new Date(Date.now() + 5 * DAY) });
+
+    const list = expectOk(await get('/medicines/expiring?days=30', pharmacist));
+
+    expect(list[0]).toMatchObject({ unit: 'ml' });
   });
 });
 

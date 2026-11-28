@@ -279,11 +279,17 @@ describe('billing — taking a payment', () => {
 
     const results = await Promise.all([pay(4000), pay(4000)]);
     const statuses = results.map((res) => res.status).sort();
+    const [, loser] = [...results].sort((a, b) => a.status - b.status);
 
-    // One succeeds; the loser's own balance re-check (against fresh state,
-    // inside the retry loop) must catch the clash as a conflict rather than
-    // letting both writes land and silently overpay the bill.
-    expect(statuses).toEqual([200, 409].sort());
+    // One succeeds; the other must be refused rather than letting both writes
+    // land and silently overpay the bill. How it is refused depends on timing:
+    // 409 BALANCE_CHANGED when both passed the pre-check and the loser's
+    // re-check (inside the retry loop) caught the clash, or 400 OVERPAYMENT when
+    // the winner had already saved before the loser first read the bill. Which
+    // one happens varies with load, so accept either.
+    expect(statuses[0]).toBe(200);
+    expect([400, 409]).toContain(statuses[1]);
+    expect(['BALANCE_CHANGED', 'OVERPAYMENT']).toContain(loser.body.error?.code ?? loser.body.code);
     const stored = await Bill.findById(bill.id).lean();
     expect(stored.paidCents).toBe(4000);
     expect(stored.payments).toHaveLength(1);
@@ -432,6 +438,37 @@ describe('billing — the outstanding list names the patient (B15)', () => {
     const nurse = await createActor(ROLES.NURSE);
 
     expectError(await outstanding(nurse), 403, 'FORBIDDEN');
+  });
+});
+
+describe('billing — drafts are not revenue (B16)', () => {
+  const revenue = (actor) => api().get(url('/bills/revenue')).set(actor.headers);
+
+  it('leaves a draft out of billed and count', async () => {
+    const staff = await clerk();
+    await issuedBill({ staff }); // 5 000 cents, issued
+    await issuedBill({
+      staff,
+      body: { isDraft: true, items: [{ description: 'Surgery', unitPriceCents: 10000, quantity: 1 }] },
+    });
+
+    const summary = expectOk(await revenue(await finance()));
+
+    expect(summary.billedCents).toBe(5000);
+    expect(summary.count).toBe(1);
+    expect(summary.byStatus[BILL_STATUS.DRAFT]).toBeUndefined();
+  });
+
+  it('still leaves a void bill out', async () => {
+    const staff = await clerk();
+    await issuedBill({ staff });
+    const { bill } = await issuedBill({ staff });
+    await api().post(url(`/bills/${bill.id}/void`)).set(staff.headers).send({}).expect(200);
+
+    const summary = expectOk(await revenue(await finance()));
+
+    expect(summary.billedCents).toBe(5000);
+    expect(summary.count).toBe(1);
   });
 });
 

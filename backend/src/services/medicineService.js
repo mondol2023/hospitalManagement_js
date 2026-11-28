@@ -340,22 +340,50 @@ class MedicineService {
 
   // --- Sweeps ---------------------------------------------------------------
 
-  /** Withdraws everything that has passed its expiry date. */
-  async withdrawExpired() {
+  /**
+   * Writes off everything that has passed its expiry date: each batch goes to
+   * zero and leaves circulation, with a ledger row naming the actor. A batch
+   * that changed between the read and the write is skipped, not double-counted.
+   * `items[].quantity` is the amount written off.
+   */
+  async withdrawExpired(actor) {
+    this._assertInventoryStaff(actor);
+
     const expired = await this.medicines.expiringBefore(new Date());
-    if (!expired.length) return { withdrawn: 0 };
+    const items = [];
 
-    const result = await this.medicines.updateMany(
-      { _id: { $in: expired.map((m) => m._id) } },
-      { $set: { isActive: false } }
-    );
+    for (const batch of expired) {
+      const written = await withTransaction(async (session) => {
+        const medicine = await this.medicines.writeOff(batch._id, batch.quantity, { session });
+        if (!medicine) return false;
+
+        await this.stockMovements.create(
+          {
+            medicine: batch._id,
+            kind: STOCK_MOVEMENT.WITHDRAWN,
+            delta: batch.quantity ? -batch.quantity : 0, // avoid -0 for an already-empty batch
+            onHand: 0,
+            actor: accessPolicy.toId(actor.id || actor._id),
+            reason: 'Expired — written off',
+          },
+          { session }
+        );
+        return true;
+      });
+      if (written) items.push(batch);
+    }
+
+    if (!items.length) return { withdrawn: 0, units: 0, items: [] };
+
     await this.ns.invalidate();
-
-    logger.warn('Expired stock withdrawn', {
-      count: result.modifiedCount || expired.length,
-      batches: expired.map((m) => m.batchNumber),
+    const units = items.reduce((sum, item) => sum + item.quantity, 0);
+    logger.warn('Expired stock written off', {
+      count: items.length,
+      units,
+      batches: items.map((m) => m.batchNumber),
+      by: String(actor.id || actor._id),
     });
-    return { withdrawn: result.modifiedCount || expired.length, items: expired };
+    return { withdrawn: items.length, units, items };
   }
 
   /** Tells the pharmacy what needs reordering. */

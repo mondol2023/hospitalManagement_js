@@ -63,10 +63,19 @@ class BillRepository extends BaseRepository {
     );
   }
 
-  /** Revenue over a period, split by status — one pass, no per-bill round trips. */
+  /**
+   * Revenue over a period, split by status — one pass, no per-bill round trips.
+   * A draft is a bill the desk has not issued and a void one never stood, so
+   * neither counts as billed.
+   */
   revenueBetween(from, to) {
     return this.aggregate([
-      { $match: { createdAt: { $gte: from, $lt: to }, status: { $ne: BILL_STATUS.VOID } } },
+      {
+        $match: {
+          createdAt: { $gte: from, $lt: to },
+          status: { $nin: [BILL_STATUS.VOID, BILL_STATUS.DRAFT] },
+        },
+      },
       {
         $group: {
           _id: '$status',

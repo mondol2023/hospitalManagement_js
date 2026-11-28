@@ -171,6 +171,7 @@ const STOCK_MOVEMENT = Object.freeze({
   ADJUST: 'adjust',
   ADMINISTERED: 'administered',
   RESTORED: 'restored',
+  WITHDRAWN: 'withdrawn',
 });
 
 const STOCK_MOVEMENT_VALUES = Object.freeze(Object.values(STOCK_MOVEMENT));

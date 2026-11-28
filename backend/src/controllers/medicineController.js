@@ -43,7 +43,7 @@ const adjust = handle((req) =>
   })
 );
 
-const withdrawExpired = handle(() => medicineService.withdrawExpired());
+const withdrawExpired = handle((req) => medicineService.withdrawExpired(req.user));
 
 module.exports = {
   list,

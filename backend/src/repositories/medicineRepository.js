@@ -50,10 +50,26 @@ class MedicineRepository extends BaseRepository {
       .exec();
   }
 
+  /**
+   * Writes a batch off: inactive, count zero. The filter pins the quantity that
+   * was read, so a batch dispensed or restocked since is left alone (null) and
+   * the ledger row the caller writes next never disagrees with the shelf.
+   */
+  writeOff(medicineId, quantity, { session } = {}) {
+    return this.model
+      .findOneAndUpdate(
+        { _id: medicineId, isActive: true, quantity },
+        { $set: { isActive: false, quantity: 0 } },
+        { new: true, session }
+      )
+      .lean()
+      .exec();
+  }
+
   expiringBefore(date) {
     return this.model
       .find({ isActive: true, expiryDate: { $lte: date } })
-      .select('name batchNumber quantity expiryDate')
+      .select('name batchNumber quantity unit expiryDate')
       .sort({ expiryDate: 1 })
       .lean()
       .exec();
